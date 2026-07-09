@@ -18,6 +18,7 @@ const Game = {
     touchX: 0, touchY: 0,
     gridHue: 0,
     targetGridHue: 0,
+    zoom: 1, // масштаб уровня (1 = обычный, меньше = дальше камера)
     combo: 0,
     comboTimer: 0,
     comboTexts: [], // floating combo texts
@@ -102,11 +103,18 @@ const Game = {
     },
 
     startLevel() {
-        Level.generate(this.levelNum, this.W, this.H);
+        // масштаб уменьшается с уровнем: 1.0 → 0.85 → 0.72 → ... мин 0.45
+        this.zoom = Math.max(0.45, 1.0 - (this.levelNum - 1) * 0.04);
+
+        // виртуальный размер мира (больше экрана при маленьком zoom)
+        const vW = Math.floor(this.W / this.zoom);
+        const vH = Math.floor(this.H / this.zoom);
+
+        Level.generate(this.levelNum, vW, vH);
         Player.init(Level.playerStart.x, Level.playerStart.y);
         Particles.clear();
         this.state = 'playing';
-        this.targetGridHue = (this.levelNum * 47) % 360; // target hue — will lerp to it
+        this.targetGridHue = (this.levelNum * 47) % 360;
         this.combo = 0;
         this.comboTimer = 0;
         this.comboTexts = [];
@@ -552,15 +560,15 @@ const Game = {
             return;
         }
 
-        // Start aiming — don't shoot yet!
-        Player.startAim(x, y);
+        // Start aiming — конвертируем экранные координаты в мировые
+        Player.startAim(x / this.zoom, y / this.zoom);
     },
 
     handleInputMove(x, y) {
         this.touchX = x;
         this.touchY = y;
         if (this.state === 'playing' && Player.aiming) {
-            Player.aim(x, y);
+            Player.aim(x / this.zoom, y / this.zoom);
         }
     },
 
@@ -652,27 +660,40 @@ const Game = {
             UI.buttons = [];
             UI.drawMainMenu(ctx, W, H);
         } else if (this.state === 'playing') {
-            this.drawBackground(ctx, W, H);
+            ctx.save();
+            ctx.scale(this.zoom, this.zoom);
+            const vW = W / this.zoom, vH = H / this.zoom;
+            this.drawBackground(ctx, vW, vH);
             Level.drawWalls(ctx);
             Level.drawCoins(ctx);
             Level.drawTargets(ctx);
             Player.draw(ctx);
             Particles.draw(ctx);
-            Particles.drawFlash(ctx, W, H);
-            UI.drawHUD(ctx, W, H);
+            Particles.drawFlash(ctx, vW, vH);
             this.drawFloatingTexts(ctx);
-            this.drawAimHint(ctx, W, H);
+            this.drawAimHint(ctx, vW, vH);
+            ctx.restore();
+            // HUD поверх без zoom
+            UI.drawHUD(ctx, W, H);
         } else if (this.state === 'upgrade') {
-            this.drawBackground(ctx, W, H);
+            ctx.save();
+            ctx.scale(this.zoom, this.zoom);
+            const vW2 = W / this.zoom, vH2 = H / this.zoom;
+            this.drawBackground(ctx, vW2, vH2);
             Level.drawWalls(ctx);
             Particles.draw(ctx);
-            Particles.drawFlash(ctx, W, H);
+            Particles.drawFlash(ctx, vW2, vH2);
+            ctx.restore();
             UI.drawUpgradeScreen(ctx, W, H);
         } else if (this.state === 'gameover') {
-            this.drawBackground(ctx, W, H);
+            ctx.save();
+            ctx.scale(this.zoom, this.zoom);
+            const vW3 = W / this.zoom, vH3 = H / this.zoom;
+            this.drawBackground(ctx, vW3, vH3);
             Level.drawWalls(ctx);
             Particles.draw(ctx);
-            Particles.drawFlash(ctx, W, H);
+            Particles.drawFlash(ctx, vW3, vH3);
+            ctx.restore();
             UI.drawGameOver(ctx, W, H);
         } else if (this.state === 'leaderboard') {
             UI.drawLeaderboard(ctx, W, H);

@@ -489,7 +489,7 @@ const Level = {
         this.playerStart = { x: W / 2, y: H - margin - 30 };
 
         // ── Inner walls ──
-        const wallCount = Math.min(1 + Math.floor(num / 2), 6);
+        const wallCount = Math.min(1 + Math.floor(num / 2), 10);
         const hueBase = (num * 47) % 360;
 
         for (let i = 0; i < wallCount; i++) {
@@ -527,7 +527,8 @@ const Level = {
         this.walls = [...this.borderWalls, ...this.innerWalls];
 
         // ── Targets ──
-        const targetCount = Math.min(2 + Math.floor(num * 0.6), 7);
+        // больше целей на больших уровнях (мир растёт)
+        const targetCount = Math.min(2 + Math.floor(num * 0.8), 12);
         const movingChance = num <= 2 ? 0 : num <= 4 ? 0.3 : num <= 7 ? 0.5 : 0.7;
         // blinking targets: appear from level 6+
         const blinkChance = num <= 5 ? 0 : num <= 8 ? 0.2 : 0.35;

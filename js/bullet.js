@@ -115,11 +115,12 @@ class Bullet {
         // clamp inside play area — never fly past borders
         const pa = Level.playArea;
         if (pa) {
-            const bw = 12; // border wall thickness
+            const bw = 12;
+            const vW = Game.W / Game.zoom, vH = Game.H / Game.zoom;
             const minX = bw + this.radius;
-            const maxX = Game.W - bw - this.radius;
+            const maxX = vW - bw - this.radius;
             const minY = pa.y;
-            const maxY = Game.H - bw - this.radius;
+            const maxY = vH - bw - this.radius;
             if (this.x < minX) { this.x = minX; this.vx = Math.abs(this.vx); }
             if (this.x > maxX) { this.x = maxX; this.vx = -Math.abs(this.vx); }
             if (this.y < minY) { this.y = minY; this.vy = Math.abs(this.vy); }
