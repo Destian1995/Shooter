@@ -147,6 +147,11 @@ const UI = {
         ctx.font = '13px Arial';
         ctx.fillText(`Лучший счёт: ${Game.highScore}`, W / 2, H * 0.78);
         ctx.fillText(`Лучший уровень: ${Game.highLevel}`, W / 2, H * 0.78 + 22);
+
+        // версия
+        ctx.fillStyle = '#334';
+        ctx.font = '11px Arial';
+        ctx.fillText(`v${Game.VERSION}`, W / 2, H * 0.95);
     },
 
     drawUpgradeScreen(ctx, W, H) {
