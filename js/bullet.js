@@ -81,6 +81,7 @@ class Bullet {
             if (!t.alive) continue;
             if (this.hitTargets.has(t)) continue;
             if (t.type === 'blinking' && !t.visible) continue;
+            if (t.shielded) continue; // protected by shield
             if (dist(this.x, this.y, t.x, t.y) < this.radius + t.radius) {
                 this.hitTargets.add(t);
                 t.hit(this.damage);

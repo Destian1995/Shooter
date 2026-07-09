@@ -7,29 +7,74 @@ class Target {
         this.hp = this.maxHp = hp;
         this.color = color;
         this.score = score;
-        this.type = type || 'normal'; // normal, armored, moving, blinking
+        this.type = type || 'normal';
         this.alive = true;
         this.pulse = 0;
-        // for moving targets
+        // moving
         this.originX = x; this.originY = y;
         this.moveAngle = rand(0, TAU);
         this.moveSpeed = type === 'moving' ? rand(50, 120) : 0;
         this.moveRange = type === 'moving' ? rand(25, 60) : 0;
-        this.movePattern = randInt(0, 2); // 0=circle, 1=horizontal, 2=vertical
+        this.movePattern = randInt(0, 2);
         this.hitFlash = 0;
         this.spawnAnim = 1.0;
         // blinking
         this.blinkTimer = rand(0, TAU);
         this.blinkSpeed = type === 'blinking' ? rand(1.5, 3.0) : 0;
-        this.visible = true; // for blinking targets
+        this.visible = true;
         this.blinkAlpha = 1;
+        // healer
+        this.healTimer = 0;
+        this.healPulse = 0;
+        // teleporter
+        this.teleportCooldown = 0;
+        // shield
+        this.shieldActive = type === 'shield';
+        // splitter
+        this.hasSplit = false;
     }
 
     hit(dmg) {
+        // shield targets are immune while protecting
+        if (this.shielded) return;
+
+        // teleporter: teleport on hit instead of taking damage (first hit)
+        if (this.type === 'teleporter' && this.teleportCooldown <= 0 && this.hp > 1) {
+            this.teleportCooldown = 1.5;
+            this.hp -= Math.floor(dmg / 2) || 0; // take half damage
+            if (this.hp < 1) this.hp = 1;
+            this.doTeleport();
+            this.hitFlash = 0.3;
+            return;
+        }
+
         this.hp -= dmg;
         this.hitFlash = 0.2;
         if (this.hp <= 0) {
             this.alive = false;
+        }
+    }
+
+    doTeleport() {
+        const pa = Level.playArea;
+        if (!pa) return;
+        for (let i = 0; i < 50; i++) {
+            const nx = rand(pa.x + 40, pa.x + pa.w - 40);
+            const ny = rand(pa.y + 30, pa.y + pa.h - 140);
+            let blocked = false;
+            for (const w of Level.walls) {
+                if (nx + 20 > w.x && nx - 20 < w.x + w.w &&
+                    ny + 20 > w.y && ny - 20 < w.y + w.h) { blocked = true; break; }
+            }
+            if (blocked) continue;
+            if (dist(nx, ny, Level.playerStart.x, Level.playerStart.y) < 80) continue;
+            // teleport effects
+            Particles.explosion(this.x, this.y, '#bb44ff', 0.5);
+            Particles.explosion(nx, ny, '#bb44ff', 0.5);
+            Sound.ricochet();
+            this.x = nx; this.y = ny;
+            this.originX = nx; this.originY = ny;
+            return;
         }
     }
 
@@ -59,12 +104,45 @@ class Target {
             }
         }
 
-        // blinking logic
+        // blinking
         if (this.type === 'blinking') {
             this.blinkTimer += dt * this.blinkSpeed;
             const sin = Math.sin(this.blinkTimer);
-            this.visible = sin > -0.3; // visible ~75% of the time
+            this.visible = sin > -0.3;
             this.blinkAlpha = this.visible ? clamp(sin + 0.3, 0.2, 1) : 0;
+        }
+
+        // teleporter cooldown
+        if (this.type === 'teleporter') {
+            this.teleportCooldown = Math.max(0, this.teleportCooldown - dt);
+        }
+
+        // healer: restore 1 HP to a nearby target every 3 seconds
+        if (this.type === 'healer' && this.alive) {
+            this.healTimer += dt;
+            this.healPulse += dt * 4;
+            if (this.healTimer >= 3) {
+                this.healTimer = 0;
+                for (const t of Level.targets) {
+                    if (t === this || !t.alive) continue;
+                    if (t.hp >= t.maxHp) continue;
+                    if (dist(this.x, this.y, t.x, t.y) < 120) {
+                        t.hp = Math.min(t.hp + 1, t.maxHp);
+                        t.hitFlash = 0.15;
+                        Particles.burst(t.x, t.y, 8, '#44ff88', 80, 3, 0.3, 6);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // shield: mark nearby targets as shielded
+        if (this.type === 'shield') {
+            for (const t of Level.targets) {
+                if (t === this) continue;
+                if (!t.alive) { t.shielded = false; continue; }
+                t.shielded = this.alive && dist(this.x, this.y, t.x, t.y) < 100;
+            }
         }
     }
 
@@ -186,6 +264,110 @@ class Target {
             ctx.stroke();
         }
 
+        // healer — green cross + heal aura
+        if (this.type === 'healer') {
+            ctx.strokeStyle = 'rgba(68,255,136,0.6)';
+            ctx.lineWidth = 2.5;
+            const cs = drawR * 0.4;
+            ctx.beginPath();
+            ctx.moveTo(this.x - cs, this.y); ctx.lineTo(this.x + cs, this.y);
+            ctx.moveTo(this.x, this.y - cs); ctx.lineTo(this.x, this.y + cs);
+            ctx.stroke();
+            // heal aura ring
+            const healA = 0.15 + Math.sin(this.healPulse) * 0.1;
+            ctx.strokeStyle = `rgba(68,255,136,${healA})`;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 4]);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 120, 0, TAU);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // shield — blue dome + protection aura
+        if (this.type === 'shield') {
+            // dome shape
+            ctx.strokeStyle = 'rgba(68,180,255,0.7)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, drawR + 6, -Math.PI, 0);
+            ctx.stroke();
+            // protection aura
+            const shieldA = 0.1 + Math.sin(this.pulse * 2) * 0.06;
+            ctx.strokeStyle = `rgba(68,180,255,${shieldA})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 100, 0, TAU);
+            ctx.stroke();
+            // hex pattern inside
+            ctx.strokeStyle = 'rgba(100,200,255,0.3)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 6; i++) {
+                const ha = i * TAU / 6 + this.pulse * 0.5;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x + Math.cos(ha) * drawR * 0.7, this.y + Math.sin(ha) * drawR * 0.7);
+                ctx.stroke();
+            }
+        }
+
+        // shielded indicator on protected targets
+        if (this.shielded) {
+            ctx.strokeStyle = 'rgba(68,180,255,0.4)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, drawR + 8, 0, TAU);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // teleporter — portal rings
+        if (this.type === 'teleporter') {
+            const tpA = 0.4 + Math.sin(this.pulse * 3) * 0.2;
+            ctx.strokeStyle = `rgba(187,68,255,${tpA})`;
+            ctx.lineWidth = 1.5;
+            const r1 = drawR + 5 + Math.sin(this.pulse * 2) * 3;
+            const r2 = drawR + 9 + Math.cos(this.pulse * 2.5) * 3;
+            ctx.beginPath(); ctx.arc(this.x, this.y, r1, 0, TAU); ctx.stroke();
+            ctx.beginPath(); ctx.arc(this.x, this.y, r2, 0, TAU); ctx.stroke();
+            // swirl lines
+            ctx.strokeStyle = 'rgba(200,100,255,0.3)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 4; i++) {
+                const sa = this.pulse * 1.5 + i * TAU / 4;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, drawR * 0.6, sa, sa + 0.8);
+                ctx.stroke();
+            }
+        }
+
+        // splitter — division symbol
+        if (this.type === 'splitter') {
+            ctx.strokeStyle = 'rgba(255,100,200,0.7)';
+            ctx.lineWidth = 2;
+            const ds = drawR * 0.35;
+            // horizontal line
+            ctx.beginPath();
+            ctx.moveTo(this.x - ds, this.y); ctx.lineTo(this.x + ds, this.y);
+            ctx.stroke();
+            // two dots
+            ctx.fillStyle = 'rgba(255,100,200,0.7)';
+            ctx.beginPath(); ctx.arc(this.x, this.y - ds * 0.7, 2.5, 0, TAU); ctx.fill();
+            ctx.beginPath(); ctx.arc(this.x, this.y + ds * 0.7, 2.5, 0, TAU); ctx.fill();
+            // pulsing split hint
+            const spA = 0.1 + Math.sin(this.pulse * 2) * 0.05;
+            ctx.strokeStyle = `rgba(255,100,200,${spA})`;
+            ctx.lineWidth = 1;
+            // two smaller circles
+            ctx.beginPath();
+            ctx.arc(this.x - drawR * 0.6, this.y + drawR * 0.6, drawR * 0.4, 0, TAU);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(this.x + drawR * 0.6, this.y + drawR * 0.6, drawR * 0.4, 0, TAU);
+            ctx.stroke();
+        }
+
         // moving arrows
         if (this.type === 'moving') {
             ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -242,6 +424,22 @@ class Target {
         if (this.type === 'explosive') {
             ctx.fillStyle = '#ff6622';
             ctx.fillText('💣', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'healer') {
+            ctx.fillStyle = '#44ff88';
+            ctx.fillText('💚', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'shield') {
+            ctx.fillStyle = '#44bbff';
+            ctx.fillText('🛡', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'teleporter') {
+            ctx.fillStyle = '#bb44ff';
+            ctx.fillText('🌀', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'splitter') {
+            ctx.fillStyle = '#ff66cc';
+            ctx.fillText('÷', this.x, this.y - this.radius - 3);
         }
 
         ctx.globalAlpha = 1;
@@ -379,11 +577,31 @@ const Level = {
                 const roll = Math.random();
                 const isMoving = roll < movingChance;
                 const isBlinking = !isMoving && roll < movingChance + blinkChance;
-                // explosive targets: level 3+, ~15%
-                const isExplosive = !isMoving && !isBlinking && num >= 3 && Math.random() < 0.15;
+                const isExplosive = !isMoving && !isBlinking && num >= 3 && Math.random() < 0.12;
+                // new types: healer lvl5+, shield lvl7+, teleporter lvl4+, splitter lvl6+
+                const isHealer = !isMoving && !isBlinking && !isExplosive && num >= 5 && Math.random() < 0.12;
+                const isTeleporter = !isMoving && !isBlinking && !isExplosive && !isHealer && num >= 4 && Math.random() < 0.15;
+                const isShield = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && num >= 7 && Math.random() < 0.12;
+                const isSplitter = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && num >= 6 && Math.random() < 0.15;
 
                 if (isExplosive) {
                     type = 'explosive';
+                    baseScore = 15;
+                } else if (isHealer) {
+                    type = 'healer';
+                    hp = 2;
+                    baseScore = 25;
+                } else if (isShield) {
+                    type = 'shield';
+                    hp = 2;
+                    baseScore = 30;
+                } else if (isTeleporter) {
+                    type = 'teleporter';
+                    hp = 3;
+                    baseScore = 20;
+                } else if (isSplitter) {
+                    type = 'splitter';
+                    hp = 1;
                     baseScore = 15;
                 } else if (num >= 4 && !isMoving && !isBlinking && Math.random() < 0.25) {
                     type = 'armored';

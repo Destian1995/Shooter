@@ -376,6 +376,51 @@ const Game = {
             Particles.shockwave(target.x, target.y, target.color, swRadius * 0.8);
         }
 
+        // ── Splitter: spawn 2 smaller targets ──
+        if (target.type === 'splitter' && !target.hasSplit) {
+            target.hasSplit = true;
+            for (let i = 0; i < 2; i++) {
+                const off = (i === 0 ? -1 : 1) * 25;
+                const st = new Target(
+                    target.x + off, target.y + rand(-15, 15),
+                    target.radius * 0.6, 1,
+                    '#ff88cc', Math.floor(target.score * 0.5), 'normal'
+                );
+                st.spawnAnim = 0.5;
+                Level.targets.push(st);
+            }
+            this.killTexts.push({
+                x: target.x, y: target.y - floatY,
+                text: 'ДЕЛЕНИЕ!',
+                life: 1.2, maxLife: 1.2,
+                color: '#ff66cc'
+            });
+            Particles.burst(target.x, target.y, 12, '#ff88cc', 150, 4, 0.4, 8);
+        }
+
+        // ── Shield death: unshield all ──
+        if (target.type === 'shield') {
+            for (const t of Level.targets) t.shielded = false;
+            this.comboTexts.push({
+                x: this.W / 2, y: this.H * 0.3,
+                text: 'ЩИТ СНЯТ!',
+                life: 1.5, maxLife: 1.5,
+                color: '#44bbff',
+                size: 26
+            });
+        }
+
+        // ── Healer kill bonus ──
+        if (target.type === 'healer') {
+            this.comboTexts.push({
+                x: this.W / 2, y: this.H * 0.3,
+                text: 'ЛЕКАРЬ УБИТ!',
+                life: 1.5, maxLife: 1.5,
+                color: '#44ff88',
+                size: 26
+            });
+        }
+
         // add bonus score and coins
         this.score += totalScore;
         this.coins += Math.floor(totalScore / 8 * this.coinMultiplier);
