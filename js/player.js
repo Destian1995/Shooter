@@ -22,6 +22,9 @@ const Player = {
         predict: 0,   // 0=basic, 1=longer+brighter, 2=target highlight, 3=full path+crit zone
         crit: 0,       // crit chance %
         magnet: 0,     // bullet attraction to targets
+        vampire: 0,    // chance to restore shot on kill
+        lucky: 0,      // chance for double coins
+        ghost: 0,      // bullets pass through walls N times
     },
 
     upgrades: {
@@ -33,6 +36,9 @@ const Player = {
         predict: 0,
         crit: 0,
         magnet: 0,
+        vampire: 0,
+        lucky: 0,
+        ghost: 0,
     },
 
     init(x, y) {
@@ -79,6 +85,9 @@ const Player = {
         this.stats.predict = this.upgrades.predict;
         this.stats.crit = Math.min(this.upgrades.crit * 8, 40);
         this.stats.magnet = this.upgrades.magnet * 30;
+        this.stats.vampire = Math.min(this.upgrades.vampire * 0.15, 0.6); // 15% per lvl, max 60%
+        this.stats.lucky = Math.min(this.upgrades.lucky * 0.12, 0.5);     // 12% per lvl, max 50%
+        this.stats.ghost = this.upgrades.ghost;                            // wall passes
     },
 
     startAim(tx, ty) {

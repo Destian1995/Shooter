@@ -14,6 +14,9 @@ const UI = {
         { key: 'predict', name: 'Прогноз', icon: '🔮', desc: 'улучш. прицел', maxLvl: 3, baseCost: (l) => 60 + l * 50 },
         { key: 'crit', name: 'Крит. удар', icon: '⚔', desc: '+8% шанс x3', maxLvl: 5, baseCost: (l) => 80 + l * 60 },
         { key: 'magnet', name: 'Магнит', icon: '🧲', desc: 'пуля к цели', maxLvl: 4, baseCost: (l) => 100 + l * 80 },
+        { key: 'vampire', name: 'Вампир', icon: '🩸', desc: '15% возврат выстрела', maxLvl: 4, baseCost: (l) => 120 + l * 90 },
+        { key: 'lucky', name: 'Удача', icon: '🍀', desc: '12% двойные монеты', maxLvl: 4, baseCost: (l) => 70 + l * 55 },
+        { key: 'ghost', name: 'Призрак', icon: '👻', desc: 'сквозь стены', maxLvl: 3, baseCost: (l) => 150 + l * 100 },
     ],
 
     getUpgradeCost(u, lvl) {
@@ -82,9 +85,12 @@ const UI = {
         // характеристики
         ctx.fillStyle = '#88aacc';
         ctx.font = '11px Arial';
-        let infoText = `↗${Player.stats.maxBounces}  🎯${Player.stats.maxPierces}`;
-        if (Player.stats.crit > 0) infoText += `  ⚔${Player.stats.crit}%`;
-        if (Player.stats.magnet > 0) infoText += `  🧲`;
+        let infoText = `↗${Player.stats.maxBounces} 🎯${Player.stats.maxPierces}`;
+        if (Player.stats.crit > 0) infoText += ` ⚔${Player.stats.crit}%`;
+        if (Player.stats.magnet > 0) infoText += ` 🧲`;
+        if (Player.stats.vampire > 0) infoText += ` 🩸`;
+        if (Player.stats.lucky > 0) infoText += ` 🍀`;
+        if (Player.stats.ghost > 0) infoText += ` 👻${Player.stats.ghost}`;
         ctx.fillText(infoText, W / 2, 34);
 
         // кнопка звука
@@ -177,9 +183,9 @@ const UI = {
 
         // кнопки прокачки
         this.buttons = [];
-        const startY = 135;
+        const startY = 130;
         const bw = Math.min(W - 40, 320);
-        const bh = 44;
+        const bh = 38;
         const gap = 5;
 
         for (let i = 0; i < this.upgradeData.length; i++) {
@@ -200,14 +206,14 @@ const UI = {
 
             ctx.textAlign = 'left';
             ctx.fillStyle = maxed ? '#66cc66' : '#ddd';
-            ctx.font = 'bold 13px Arial';
-            ctx.fillText(`${u.icon} ${u.name}`, bx + 10, by + 15);
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`${u.icon} ${u.name}`, bx + 8, by + 13);
 
             for (let d = 0; d < Math.min(u.maxLvl, 10); d++) {
-                const dx = bx + 10 + d * 12;
+                const dx = bx + 8 + d * 10;
                 ctx.fillStyle = d < lvl ? '#ffcc44' : '#333';
                 ctx.beginPath();
-                ctx.arc(dx + 3, by + 33, 3.5, 0, TAU);
+                ctx.arc(dx + 3, by + 28, 3, 0, TAU);
                 ctx.fill();
             }
 

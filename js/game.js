@@ -23,6 +23,8 @@ const Game = {
     comboTimer: 0,
     comboTexts: [], // floating combo texts
     killTexts: [],  // floating score texts
+    banners: [],    // sliding banner messages
+    killStreak: 0,  // kills this level (for streak effects)
 
     init() {
         this.canvas = document.getElementById('game');
@@ -97,16 +99,26 @@ const Game = {
         this.comboTimer = 0;
         this.comboTexts = [];
         this.killTexts = [];
-        Player.upgrades = { bounces: 0, damage: 0, speed: 0, shots: 0, piercing: 0, predict: 0, crit: 0, magnet: 0 };
+        Player.upgrades = { bounces: 0, damage: 0, speed: 0, shots: 0, piercing: 0, predict: 0, crit: 0, magnet: 0, vampire: 0, lucky: 0, ghost: 0 };
         Player.applyUpgrades();
         this.startLevel();
     },
 
+    showBanner(text, color, size) {
+        this.banners.push({
+            text,
+            color: color || '#fff',
+            size: size || 22,
+            x: this.W + 50, // starts off-screen right
+            life: 4.0,
+            maxLife: 4.0,
+            y: 0.15 + this.banners.length * 0.06, // stack vertically (% of H)
+        });
+    },
+
     startLevel() {
-        // масштаб уменьшается с уровнем: 1.0 → 0.85 → 0.72 → ... мин 0.45
         this.zoom = Math.max(0.45, 1.0 - (this.levelNum - 1) * 0.04);
 
-        // виртуальный размер мира (больше экрана при маленьком zoom)
         const vW = Math.floor(this.W / this.zoom);
         const vH = Math.floor(this.H / this.zoom);
 
@@ -119,6 +131,26 @@ const Game = {
         this.comboTimer = 0;
         this.comboTexts = [];
         this.killTexts = [];
+        this.banners = [];
+        this.killStreak = 0;
+
+        // level-up banner
+        if (this.levelNum > 1) {
+            this.showBanner(`УРОВЕНЬ ${this.levelNum}`, '#00ddff', 28);
+            const targetCount = Level.targets.length;
+            const types = Level.targets.map(t => t.type).filter(t => t !== 'normal');
+            if (types.length > 0) {
+                const unique = [...new Set(types)];
+                const typeNames = {
+                    moving: 'движущиеся', blinking: 'мигающие', armored: 'бронированные',
+                    explosive: 'взрывные', healer: 'лекари', shield: 'щитовики',
+                    teleporter: 'телепортеры', splitter: 'делящиеся',
+                    multiplier: 'множители', powerup: 'бонус',
+                };
+                const names = unique.slice(0, 3).map(t => typeNames[t] || t).join(', ');
+                this.showBanner(`${targetCount} целей: ${names}`, '#aabbcc', 16);
+            }
+        }
     },
 
     completeLevel() {
@@ -194,7 +226,33 @@ const Game = {
     onTargetKill(target, bounces, pierceCount, isCrit, hasShockwave) {
         this.combo++;
         this.comboTimer = 2;
+        this.killStreak++;
         Sound.kill();
+
+        // streak banners
+        if (this.killStreak === 3) this.showBanner('СЕРИЯ УБИЙСТВ!', '#ff8844', 24);
+        else if (this.killStreak === 5) this.showBanner('НЕУДЕРЖИМ!', '#ff4444', 28);
+        else if (this.killStreak === 8) this.showBanner('РАЗРУШИТЕЛЬ!', '#ff22ff', 32);
+        else if (this.killStreak === 12) this.showBanner('ЛЕГЕНДА!!!', '#ffdd00', 36);
+
+        // vampire: kills restore a shot
+        if (Player.stats.vampire > 0 && Math.random() < Player.stats.vampire) {
+            Player.shotsLeft++;
+            this.killTexts.push({
+                x: target.x + 20, y: target.y - 30,
+                text: '+1🔫', life: 1.0, maxLife: 1.0, color: '#ff4466'
+            });
+        }
+
+        // lucky: double coins chance
+        if (Player.stats.lucky > 0 && Math.random() < Player.stats.lucky) {
+            const bonus = Math.floor(target.score / 4 * this.coinMultiplier);
+            this.coins += bonus;
+            this.killTexts.push({
+                x: target.x - 20, y: target.y - 30,
+                text: `+${bonus}$!`, life: 1.0, maxLife: 1.0, color: '#ffdd44'
+            });
+        }
 
         const comboMult = Math.min(this.combo, 5);
         let totalScore = target.score * comboMult;
@@ -663,6 +721,20 @@ const Game = {
             if (this.comboTimer <= 0) this.combo = 0;
         }
 
+        // banners
+        for (let i = this.banners.length - 1; i >= 0; i--) {
+            const b = this.banners[i];
+            b.life -= rawDt;
+            // slide in from right, pause in center, slide out left
+            const progress = 1 - b.life / b.maxLife;
+            if (progress < 0.15) {
+                b.x = lerp(this.W + 50, this.W * 0.5, progress / 0.15);
+            } else if (progress > 0.75) {
+                b.x = lerp(this.W * 0.5, -300, (progress - 0.75) / 0.25);
+            }
+            if (b.life <= 0) this.banners.splice(i, 1);
+        }
+
         // floating texts
         for (let i = this.killTexts.length - 1; i >= 0; i--) {
             const t = this.killTexts[i];
@@ -737,6 +809,7 @@ const Game = {
             ctx.restore();
             // HUD поверх без zoom
             UI.drawHUD(ctx, W, H);
+            this.drawBanners(ctx, W, H);
         } else if (this.state === 'upgrade') {
             ctx.save();
             ctx.scale(this.zoom, this.zoom);
@@ -835,6 +908,45 @@ const Game = {
             ctx.restore();
         }
 
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+    },
+
+    drawBanners(ctx, W, H) {
+        for (const b of this.banners) {
+            const a = clamp(b.life / b.maxLife * 3, 0, 1); // fade at end
+            ctx.globalAlpha = a;
+
+            const by = H * b.y;
+
+            // background stripe
+            const stripeH = b.size + 14;
+            const stripeGrad = ctx.createLinearGradient(b.x - 200, 0, b.x + 200, 0);
+            stripeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            stripeGrad.addColorStop(0.3, 'rgba(0,0,0,0.6)');
+            stripeGrad.addColorStop(0.7, 'rgba(0,0,0,0.6)');
+            stripeGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = stripeGrad;
+            ctx.fillRect(b.x - 200, by - stripeH / 2, 400, stripeH);
+
+            // accent line
+            ctx.strokeStyle = b.color;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = b.color;
+            ctx.beginPath();
+            ctx.moveTo(b.x - 150, by + stripeH / 2);
+            ctx.lineTo(b.x + 150, by + stripeH / 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // text
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = b.color;
+            ctx.font = `bold ${b.size}px Arial`;
+            ctx.fillText(b.text, b.x, by);
+        }
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
     },

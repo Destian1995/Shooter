@@ -21,6 +21,7 @@ class Bullet {
         this.isCrit = isCrit || false;
         this.magnetStr = magnetStr || 0;
         this.hasShockwave = hasShockwave || false;
+        this.ghostPasses = Player.stats.ghost || 0; // wall passes remaining
     }
 
     update(dt, walls, targets) {
@@ -62,6 +63,13 @@ class Bullet {
         for (const w of walls) {
             const hit = this.checkWall(nx, ny, w);
             if (hit) {
+                // ghost: pass through inner walls instead of bouncing
+                if (this.ghostPasses > 0 && w.glow) { // w.glow = inner wall
+                    this.ghostPasses--;
+                    this.undoWallHit(hit); // undo the reflection
+                    Particles.burst(this.x, this.y, 6, '#bb66ff', 80, 3, 0.2, 6);
+                    continue;
+                }
                 if (this.bounces >= this.maxBounces) {
                     this.die();
                     return;
@@ -147,6 +155,12 @@ class Bullet {
             return { nx: normalX, ny: normalY };
         }
         return null;
+    }
+
+    undoWallHit(hit) {
+        // checkWall already flipped velocity, undo it
+        if (hit.nx !== 0) this.vx = -this.vx;
+        if (hit.ny !== 0) this.vy = -this.vy;
     }
 
     die() {
