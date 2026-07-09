@@ -97,7 +97,7 @@ const Game = {
         this.comboTimer = 0;
         this.comboTexts = [];
         this.killTexts = [];
-        Player.upgrades = { bounces: 0, damage: 0, speed: 0, shots: 0, piercing: 0, multishot: 0, predict: 0, crit: 0, magnet: 0 };
+        Player.upgrades = { bounces: 0, damage: 0, speed: 0, shots: 0, piercing: 0, predict: 0, crit: 0, magnet: 0 };
         Player.applyUpgrades();
         this.startLevel();
     },
@@ -191,7 +191,7 @@ const Game = {
         Particles.burst(coin.x, coin.baseY, 8, '#ffdd44', 100, 3, 0.3, 8);
     },
 
-    onTargetKill(target, bounces, pierceCount, isCrit) {
+    onTargetKill(target, bounces, pierceCount, isCrit, hasShockwave) {
         this.combo++;
         this.comboTimer = 2;
         Sound.kill();
@@ -378,8 +378,8 @@ const Game = {
                     });
                 }
             }
-        } else {
-            // ── Normal shockwave (non-explosive) ──
+        } else if (hasShockwave) {
+            // ── Ударная волна (только первый снаряд уровня) ──
             const swRadius = Level.processShockwave(target.x, target.y, target, Player.stats.damage);
             Particles.shockwave(target.x, target.y, target.color, swRadius * 0.8);
         }

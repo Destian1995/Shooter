@@ -19,7 +19,6 @@ const Player = {
         bulletSpeed: 500,
         maxShots: 3,
         maxPierces: 2,
-        multishot: 1,
         predict: 0,   // 0=basic, 1=longer+brighter, 2=target highlight, 3=full path+crit zone
         crit: 0,       // crit chance %
         magnet: 0,     // bullet attraction to targets
@@ -31,7 +30,6 @@ const Player = {
         speed: 0,
         shots: 0,
         piercing: 0,
-        multishot: 0,
         predict: 0,
         crit: 0,
         magnet: 0,
@@ -78,7 +76,6 @@ const Player = {
         this.stats.bulletSpeed = 500 + this.upgrades.speed * 80;
         this.stats.maxShots = 3 + this.upgrades.shots;
         this.stats.maxPierces = 2 + this.upgrades.piercing;
-        this.stats.multishot = 1 + this.upgrades.multishot;
         this.stats.predict = this.upgrades.predict;
         this.stats.crit = Math.min(this.upgrades.crit * 8, 40);
         this.stats.magnet = this.upgrades.magnet * 30;
@@ -98,44 +95,41 @@ const Player = {
     shoot() {
         if (this.shotsLeft <= 0 || this.cooldown > 0 || !this.aiming) return false;
         this.aiming = false;
+
+        const tier = this.getBulletColor();
+        const a = this.angle;
+        const isCrit = Math.random() * 100 < this.stats.crit;
+
+        // первый выстрел уровня — снаряд с ударной волной, остальные обычные
+        const hasShockwave = !this.hasShot;
         this.hasShot = true;
 
-        const spread = this.stats.multishot > 1 ? 0.15 : 0;
-        const tier = this.getBulletColor();
+        this.bullets.push(new Bullet(
+            this.x + Math.cos(a) * 25,
+            this.y + Math.sin(a) * 25,
+            a,
+            this.stats.bulletSpeed,
+            this.stats.maxBounces,
+            isCrit ? this.stats.damage * 3 : this.stats.damage,
+            isCrit ? '#ff2244' : tier.color,
+            this.stats.maxPierces,
+            isCrit,
+            this.stats.magnet,
+            hasShockwave
+        ));
 
-        for (let i = 0; i < this.stats.multishot; i++) {
-            const off = (i - (this.stats.multishot - 1) / 2) * spread;
-            const a = this.angle + off;
-
-            // crit roll
-            const isCrit = Math.random() * 100 < this.stats.crit;
-
-            this.bullets.push(new Bullet(
-                this.x + Math.cos(a) * 25,
-                this.y + Math.sin(a) * 25,
-                a,
-                this.stats.bulletSpeed,
-                this.stats.maxBounces,
-                isCrit ? this.stats.damage * 3 : this.stats.damage,
-                isCrit ? '#ff2244' : tier.color,
-                this.stats.maxPierces,
-                isCrit,
-                this.stats.magnet
-            ));
-
-            if (isCrit) {
-                const mx = this.x + Math.cos(a) * 30;
-                const my = this.y + Math.sin(a) * 30;
-                Particles.explosion(mx, my, '#ff2244', 0.6);
-                Particles.flash('#ff2244', 0.3);
-                Game.comboTexts.push({
-                    x: Game.W / 2, y: Game.H * 0.42,
-                    text: 'КРИТ!',
-                    life: 1.2, maxLife: 1.2,
-                    color: '#ff2244',
-                    size: 30
-                });
-            }
+        if (isCrit) {
+            const mx = this.x + Math.cos(a) * 30;
+            const my = this.y + Math.sin(a) * 30;
+            Particles.explosion(mx, my, '#ff2244', 0.6);
+            Particles.flash('#ff2244', 0.3);
+            Game.comboTexts.push({
+                x: Game.W / 2, y: Game.H * 0.42,
+                text: 'КРИТ!',
+                life: 1.2, maxLife: 1.2,
+                color: '#ff2244',
+                size: 30
+            });
         }
 
         this.shotsLeft--;

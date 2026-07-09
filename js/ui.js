@@ -10,7 +10,6 @@ const UI = {
         { key: 'damage', name: 'Урон+Волна', icon: '💥', desc: '+урон +волна', maxLvl: 10, baseCost: (l) => 60 + l * 50 },
         { key: 'speed', name: 'Скорость', icon: '⚡', desc: '+скорость пули', maxLvl: 6, baseCost: (l) => 40 + l * 35 },
         { key: 'shots', name: 'Выстрелы', icon: '🔫', desc: '+1 выстрел', maxLvl: 7, baseCost: (l) => 80 + l * 60, noMobileMult: true },
-        { key: 'multishot', name: 'Мультишот', icon: '🔱', desc: '+1 пуля', maxLvl: 4, baseCost: (l) => 150 + l * 100 },
         { key: 'piercing', name: 'Пробивание', icon: '🎯', desc: '+1 цель сквозь', maxLvl: 5, baseCost: (l) => 200 + l * 120 },
         { key: 'predict', name: 'Прогноз', icon: '🔮', desc: 'улучш. прицел', maxLvl: 3, baseCost: (l) => 60 + l * 50 },
         { key: 'crit', name: 'Крит. удар', icon: '⚔', desc: '+8% шанс x3', maxLvl: 5, baseCost: (l) => 80 + l * 60 },

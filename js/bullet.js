@@ -1,7 +1,7 @@
 // ── Bullet with ricochet logic ──
 
 class Bullet {
-    constructor(x, y, angle, speed, maxBounces, damage, color, maxPierces, isCrit, magnetStr) {
+    constructor(x, y, angle, speed, maxBounces, damage, color, maxPierces, isCrit, magnetStr, hasShockwave) {
         this.x = x; this.y = y;
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
@@ -13,13 +13,14 @@ class Bullet {
         this.maxPierces = maxPierces;
         this.pierceCount = 0;
         this.alive = true;
-        this.radius = isCrit ? 7 : 5;
+        this.radius = isCrit ? 7 : hasShockwave ? 6 : 5;
         this.trail = [];
         this.trailTimer = 0;
         this.age = 0;
         this.hitTargets = new Set();
         this.isCrit = isCrit || false;
         this.magnetStr = magnetStr || 0;
+        this.hasShockwave = hasShockwave || false;
     }
 
     update(dt, walls, targets) {
@@ -90,7 +91,7 @@ class Bullet {
                     Particles.explosion(t.x, t.y, t.color, this.isCrit ? 1.8 : 1.2);
                     Particles.triggerSlowmo(this.isCrit ? 0.35 : 0.25);
                     Shake.trigger(this.isCrit ? 16 : 12);
-                    Game.onTargetKill(t, this.bounces, this.pierceCount, this.isCrit);
+                    Game.onTargetKill(t, this.bounces, this.pierceCount, this.isCrit, this.hasShockwave);
                 } else {
                     Sound.hit();
                     Particles.burst(t.x, t.y, 20, t.color, 250, 6, 0.5, 12);
@@ -182,6 +183,24 @@ class Bullet {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 6 + Math.sin(this.age * 25) * 3, 0, TAU);
             ctx.stroke();
+        }
+
+        // shockwave bullet: pulsing wave ring
+        if (this.hasShockwave && !this.isCrit) {
+            const swPulse = 0.4 + Math.sin(this.age * 12) * 0.3;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#ff8833';
+            ctx.strokeStyle = `rgba(255,136,51,${swPulse})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 8 + Math.sin(this.age * 8) * 3, 0, TAU);
+            ctx.stroke();
+            // second ring
+            ctx.strokeStyle = `rgba(255,200,100,${swPulse * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 14 + Math.cos(this.age * 6) * 4, 0, TAU);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
         }
 
         // outer glow ring
