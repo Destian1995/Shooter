@@ -429,6 +429,40 @@ const Game = {
             });
         }
 
+        // ── Multiplier: spawn 3 extra bullets in random directions (no shockwave) ──
+        if (target.type === 'multiplier') {
+            const tier = Player.getBulletColor();
+            for (let i = 0; i < 3; i++) {
+                const a = rand(0, TAU);
+                Player.bullets.push(new Bullet(
+                    target.x, target.y, a,
+                    Player.stats.bulletSpeed * 0.8,
+                    Player.stats.maxBounces,
+                    Player.stats.damage,
+                    tier.color,
+                    Player.stats.maxPierces,
+                    false, // not crit
+                    Player.stats.magnet,
+                    false  // no shockwave
+                ));
+            }
+            this.comboTexts.push({
+                x: this.W / 2, y: this.H * 0.3,
+                text: 'МНОЖИТЕЛЬ!',
+                life: 1.5, maxLife: 1.5,
+                color: '#ffdd33',
+                size: 28
+            });
+            this.killTexts.push({
+                x: target.x, y: target.y - floatY,
+                text: '+3 СНАРЯДА!',
+                life: 1.5, maxLife: 1.5,
+                color: '#ffdd33'
+            });
+            Particles.burst(target.x, target.y, 20, '#ffdd33', 250, 5, 0.5, 12);
+            Sound.bonusShot();
+        }
+
         // add bonus score and coins
         this.score += totalScore;
         this.coins += Math.floor(totalScore / 8 * this.coinMultiplier);

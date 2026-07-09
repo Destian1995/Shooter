@@ -32,17 +32,18 @@ class Target {
         this.shieldActive = type === 'shield';
         // splitter
         this.hasSplit = false;
+        // multiplier
+        this.isMultiplier = type === 'multiplier';
     }
 
     hit(dmg) {
         // shield targets are immune while protecting
         if (this.shielded) return;
 
-        // teleporter: teleport on hit instead of taking damage (first hit)
+        // teleporter: first hit — teleport + 1 damage, second hit — death
         if (this.type === 'teleporter' && this.teleportCooldown <= 0 && this.hp > 1) {
             this.teleportCooldown = 1.5;
-            this.hp -= Math.floor(dmg / 2) || 0; // take half damage
-            if (this.hp < 1) this.hp = 1;
+            this.hp = 1; // one hit left after teleport
             this.doTeleport();
             this.hitFlash = 0.3;
             return;
@@ -368,6 +369,38 @@ class Target {
             ctx.stroke();
         }
 
+        // multiplier — golden star burst pattern
+        if (this.type === 'multiplier') {
+            const mPulse = 0.5 + Math.sin(this.pulse * 3) * 0.3;
+            ctx.strokeStyle = `rgba(255,220,50,${mPulse})`;
+            ctx.lineWidth = 1.5;
+            // radiating arrows outward
+            for (let i = 0; i < 6; i++) {
+                const ma = this.pulse * 0.8 + i * TAU / 6;
+                const r1 = drawR * 0.5;
+                const r2 = drawR + 6;
+                ctx.beginPath();
+                ctx.moveTo(this.x + Math.cos(ma) * r1, this.y + Math.sin(ma) * r1);
+                ctx.lineTo(this.x + Math.cos(ma) * r2, this.y + Math.sin(ma) * r2);
+                ctx.stroke();
+                // arrowhead
+                const ax = this.x + Math.cos(ma) * r2;
+                const ay = this.y + Math.sin(ma) * r2;
+                ctx.beginPath();
+                ctx.arc(ax, ay, 2, 0, TAU);
+                ctx.fillStyle = `rgba(255,220,50,${mPulse})`;
+                ctx.fill();
+            }
+            // inner multiply symbol
+            ctx.strokeStyle = 'rgba(255,240,100,0.7)';
+            ctx.lineWidth = 2;
+            const ms = drawR * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(this.x - ms, this.y - ms); ctx.lineTo(this.x + ms, this.y + ms);
+            ctx.moveTo(this.x + ms, this.y - ms); ctx.lineTo(this.x - ms, this.y + ms);
+            ctx.stroke();
+        }
+
         // moving arrows
         if (this.type === 'moving') {
             ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -440,6 +473,10 @@ class Target {
         if (this.type === 'splitter') {
             ctx.fillStyle = '#ff66cc';
             ctx.fillText('÷', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'multiplier') {
+            ctx.fillStyle = '#ffdd33';
+            ctx.fillText('✦', this.x, this.y - this.radius - 3);
         }
 
         ctx.globalAlpha = 1;
@@ -584,6 +621,7 @@ const Level = {
                 const isTeleporter = !isMoving && !isBlinking && !isExplosive && !isHealer && num >= 4 && Math.random() < 0.15;
                 const isShield = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && num >= 7 && Math.random() < 0.12;
                 const isSplitter = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && num >= 6 && Math.random() < 0.15;
+                const isMultiplier = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && !isSplitter && num >= 3 && Math.random() < 0.12;
 
                 if (isExplosive) {
                     type = 'explosive';
@@ -598,12 +636,16 @@ const Level = {
                     baseScore = 30;
                 } else if (isTeleporter) {
                     type = 'teleporter';
-                    hp = 3;
+                    hp = 2;
                     baseScore = 20;
                 } else if (isSplitter) {
                     type = 'splitter';
                     hp = 1;
                     baseScore = 15;
+                } else if (isMultiplier) {
+                    type = 'multiplier';
+                    hp = 1;
+                    baseScore = 20;
                 } else if (num >= 4 && !isMoving && !isBlinking && Math.random() < 0.25) {
                     type = 'armored';
                     hp = 2 + Math.floor(num / 5);
