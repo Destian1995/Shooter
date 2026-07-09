@@ -454,7 +454,10 @@ const Game = {
                 else if (btn.action === 'next') { this.levelNum++; this.startLevel(); }
                 else if (btn.action === 'restart') this.startGame();
                 else if (btn.action === 'leaderboard') { this.state = 'leaderboard'; UI.buttons = []; }
+                else if (btn.action === 'about') { this.state = 'about'; UI.buttons = []; }
                 else if (btn.action === 'back') { this.state = 'menu'; UI.buttons = []; }
+                else if (btn.action === 'openVK') { window.open('https://vk.com/destianfarbius', '_blank'); }
+                else if (btn.action === 'openTG') { window.open('https://t.me/K_DestianF', '_blank'); }
                 else if (btn.action === 'clearRecords') { Leaderboard.clear(); }
                 else if (btn.action === 'upgrade') {
                     if (this.coins >= btn.cost) {
@@ -606,6 +609,8 @@ const Game = {
             UI.drawGameOver(ctx, W, H);
         } else if (this.state === 'leaderboard') {
             UI.drawLeaderboard(ctx, W, H);
+        } else if (this.state === 'about') {
+            UI.drawAbout(ctx, W, H);
         } else if (this.state === 'nameinput') {
             this.drawBackground(ctx, W, H);
             Particles.draw(ctx);

@@ -116,8 +116,9 @@ const UI = {
         ctx.fillText('Попади в цель через рикошеты!', W / 2, titleY + 55);
 
         // кнопки
-        this.drawButton(ctx, W / 2 - 90, H * 0.50, 180, 50, 'ИГРАТЬ', '#00cc66', '#004422', 'play');
-        this.drawButton(ctx, W / 2 - 90, H * 0.60, 180, 50, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+        this.drawButton(ctx, W / 2 - 90, H * 0.48, 180, 50, 'ИГРАТЬ', '#00cc66', '#004422', 'play');
+        this.drawButton(ctx, W / 2 - 90, H * 0.57, 180, 50, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+        this.drawButton(ctx, W / 2 - 90, H * 0.66, 180, 42, 'ОБ АВТОРЕ', '#887744', '#221a0a', 'about');
 
         // статистика
         ctx.fillStyle = '#556677';
@@ -246,6 +247,110 @@ const UI = {
 
         this.drawButton(ctx, W / 2 - 90, H * 0.66, 180, 48, 'ЗАНОВО', '#cc3333', '#330000', 'restart');
         this.drawButton(ctx, W / 2 - 90, H * 0.76, 180, 42, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+    },
+
+    drawAbout(ctx, W, H) {
+        ctx.fillStyle = '#0a0a1a';
+        ctx.fillRect(0, 0, W, H);
+
+        // фоновые частицы
+        for (let i = 0; i < 20; i++) {
+            const t = Game.time * 0.3 + i * 1.7;
+            const px = (Math.sin(t * 0.5 + i) * 0.5 + 0.5) * W;
+            const py = (Math.cos(t * 0.4 + i * 2) * 0.5 + 0.5) * H;
+            ctx.globalAlpha = 0.06;
+            ctx.fillStyle = hsl((i * 40 + Game.time * 15) % 360, 70, 60);
+            ctx.beginPath();
+            ctx.arc(px, py, rand(2, 5), 0, TAU);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // заголовок
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#887744';
+        ctx.fillStyle = '#ccaa66';
+        ctx.font = 'bold 26px Arial';
+        ctx.fillText('ОБ АВТОРЕ', W / 2, H * 0.12);
+        ctx.shadowBlur = 0;
+
+        // аватар-заглушка
+        ctx.strokeStyle = '#887744';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(W / 2, H * 0.24, 35, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = '#1a1510';
+        ctx.fill();
+        ctx.fillStyle = '#ccaa66';
+        ctx.font = 'bold 28px Arial';
+        ctx.fillText('D', W / 2, H * 0.24);
+
+        // имя
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText('Destian', W / 2, H * 0.34);
+
+        // описание
+        ctx.fillStyle = '#8899aa';
+        ctx.font = '14px Arial';
+        ctx.fillText('Разработчик игры «Стрелок»', W / 2, H * 0.40);
+
+        // разделитель
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.2, H * 0.45);
+        ctx.lineTo(W * 0.8, H * 0.45);
+        ctx.stroke();
+
+        // соцсети
+        this.buttons = [];
+        const linkW = Math.min(W - 50, 280);
+        const linkX = W / 2 - linkW / 2;
+
+        // VK
+        ctx.fillStyle = '#1a1a2a';
+        ctx.strokeStyle = '#4477bb';
+        ctx.lineWidth = 1.5;
+        this.roundRect(ctx, linkX, H * 0.49, linkW, 50, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#4499dd';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ВКонтакте', W / 2, H * 0.49 + 18);
+        ctx.fillStyle = '#667788';
+        ctx.font = '12px Arial';
+        ctx.fillText('vk.com/destianfarbius', W / 2, H * 0.49 + 37);
+        this.buttons.push({ x: linkX, y: H * 0.49, w: linkW, h: 50, action: 'openVK' });
+
+        // Telegram
+        ctx.fillStyle = '#1a1a2a';
+        ctx.strokeStyle = '#2299cc';
+        ctx.lineWidth = 1.5;
+        this.roundRect(ctx, linkX, H * 0.60, linkW, 50, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#33bbee';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('Telegram', W / 2, H * 0.60 + 18);
+        ctx.fillStyle = '#667788';
+        ctx.font = '12px Arial';
+        ctx.fillText('@K_DestianF', W / 2, H * 0.60 + 37);
+        this.buttons.push({ x: linkX, y: H * 0.60, w: linkW, h: 50, action: 'openTG' });
+
+        // кнопка назад
+        this.drawButton(ctx, W / 2 - 90, H * 0.78, 180, 45, 'НАЗАД', '#887744', '#221a0a', 'back');
+
+        // копирайт
+        ctx.fillStyle = '#334';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('© 2025 Destian. Все права защищены.', W / 2, H * 0.90);
     },
 
     drawButton(ctx, x, y, w, h, text, color, bgColor, action) {
