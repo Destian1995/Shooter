@@ -79,6 +79,15 @@ const UI = {
         if (Player.stats.crit > 0) infoText += `  ⚔${Player.stats.crit}%`;
         if (Player.stats.magnet > 0) infoText += `  🧲`;
         ctx.fillText(infoText, W / 2, 34);
+
+        // кнопка звука
+        const sx = W - 30, sy = 52;
+        ctx.fillStyle = Sound.enabled ? '#44aa66' : '#664444';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(Sound.enabled ? '🔊' : '🔇', sx, sy);
+        // запомним позицию для клика
+        this._soundBtn = { x: sx - 15, y: sy - 12, w: 30, h: 24 };
     },
 
     drawMainMenu(ctx, W, H) {

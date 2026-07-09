@@ -66,6 +66,7 @@ class Bullet {
                     return;
                 }
                 this.bounces++;
+                Sound.ricochet();
                 Particles.wallImpact(this.x, this.y, hit.nx, hit.ny, this.color);
                 Shake.trigger(5);
             }
@@ -90,6 +91,7 @@ class Bullet {
                     Shake.trigger(this.isCrit ? 16 : 12);
                     Game.onTargetKill(t, this.bounces, this.pierceCount, this.isCrit);
                 } else {
+                    Sound.hit();
                     Particles.burst(t.x, t.y, 20, t.color, 250, 6, 0.5, 12);
                     Particles.sparks(t.x, t.y, 12, '#fff');
                     Shake.trigger(6);

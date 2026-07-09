@@ -29,6 +29,9 @@ const Game = {
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
+        // звук
+        Sound.init();
+
         // load records only (progress resets each run)
         this.highScore = parseInt(localStorage.getItem('rs_highScore') || '0');
         this.highLevel = parseInt(localStorage.getItem('rs_highLevel') || '0');
@@ -127,6 +130,8 @@ const Game = {
         if (this.score > this.highScore) this.highScore = this.score;
         if (this.levelNum > this.highLevel) this.highLevel = this.levelNum;
 
+        Sound.levelComplete();
+
         // celebration explosion
         for (let i = 0; i < 5; i++) {
             setTimeout(() => {
@@ -146,6 +151,8 @@ const Game = {
         if (this.score > this.highScore) this.highScore = this.score;
         if (this.levelNum > this.highLevel) this.highLevel = this.levelNum;
 
+        Sound.gameOver();
+
         // death explosion
         Particles.explosion(Player.x, Player.y, '#ff3333', 1.5);
         Particles.flash('#ff0000', 0.6);
@@ -164,6 +171,7 @@ const Game = {
     },
 
     collectCoin(coin) {
+        Sound.coin();
         const value = Math.floor(coin.value * this.coinMultiplier);
         this.coins += value;
         this.killTexts.push({
@@ -178,6 +186,7 @@ const Game = {
     onTargetKill(target, bounces, pierceCount, isCrit) {
         this.combo++;
         this.comboTimer = 2;
+        Sound.kill();
 
         const comboMult = Math.min(this.combo, 5);
         let totalScore = target.score * comboMult;
@@ -195,6 +204,7 @@ const Game = {
         // ── ARMORED KILL → bonus shot ──
         if (target.maxHp >= 2) {
             Player.shotsLeft++;
+            Sound.bonusShot();
             this.killTexts.push({
                 x: target.x, y: target.y - floatY,
                 text: '+1 ВЫСТРЕЛ!',
@@ -298,6 +308,7 @@ const Game = {
 
         // ── Combo text ──
         if (this.combo >= 2) {
+            Sound.combo(this.combo);
             const comboNames = ['', '', 'ДУБЛЬ!', 'ТРИПЛ!', 'УЛЬТРА!', 'МЕГА!!', 'БЕЗУМИЕ!!!'];
             const name = this.combo < comboNames.length ? comboNames[this.combo] : `x${this.combo} КОМБО!!!`;
             this.comboTexts.push({
@@ -312,6 +323,7 @@ const Game = {
 
         // ── Crit bonus ──
         if (isCrit) {
+            Sound.crit();
             const critBonus = target.score * 2;
             totalScore += critBonus;
             this.killTexts.push({
@@ -325,6 +337,7 @@ const Game = {
 
         // ── Explosive target: massive area blast ──
         if (target.type === 'explosive') {
+            Sound.explosion();
             const blastRadius = 100 + Player.stats.damage * 15;
             // big custom explosion
             for (let i = 0; i < 4; i++) {
@@ -370,6 +383,7 @@ const Game = {
 
     // called when a target is killed by shockwave chain
     onShockwaveKill(target) {
+        Sound.shockwave();
         this.combo++;
         this.comboTimer = 2;
 
@@ -446,10 +460,12 @@ const Game = {
         this.touching = true;
         this.touchX = x;
         this.touchY = y;
+        Sound.unlock();
 
         if (this.state !== 'playing') {
             const btn = UI.handleClick(x, y);
             if (btn) {
+                Sound.click();
                 if (btn.action === 'play') this.startGame();
                 else if (btn.action === 'next') { this.levelNum++; this.startLevel(); }
                 else if (btn.action === 'restart') this.startGame();
@@ -482,6 +498,12 @@ const Game = {
                     UI.buttons = [];
                 }
             }
+            return;
+        }
+
+        // кнопка звука в HUD
+        if (UI._soundBtn && pointInRect(x, y, UI._soundBtn.x, UI._soundBtn.y, UI._soundBtn.w, UI._soundBtn.h)) {
+            Sound.toggle();
             return;
         }
 

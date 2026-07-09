@@ -1,8 +1,9 @@
-const CACHE_NAME = 'strelok-v1';
+const CACHE_NAME = 'strelok-v2';
 const ASSETS = [
     './',
     './index.html',
     './manifest.json',
+    './js/sound.js',
     './js/utils.js',
     './js/particles.js',
     './js/bullet.js',

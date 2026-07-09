@@ -141,6 +141,7 @@ const Player = {
         this.shotsLeft--;
         this.cooldown = 0.15;
         this.recoilAnim = 0.2;
+        Sound.shoot();
 
         const mx = this.x + Math.cos(this.angle) * 30;
         const my = this.y + Math.sin(this.angle) * 30;
