@@ -1,7 +1,7 @@
 // ── Main game controller ──
 
 const Game = {
-    VERSION: '1.4.0',
+    VERSION: '1.5.0',
     canvas: null, ctx: null,
     W: 0, H: 0,
     state: 'menu', // menu, playing, upgrade, gameover, leaderboard, nameinput
