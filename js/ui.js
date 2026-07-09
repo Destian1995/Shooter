@@ -2,17 +2,25 @@
 
 const UI = {
     buttons: [],
+    // на маленьких экранах (мобильные) x4 стоимость всего кроме выстрелов
+    isMobile: Math.min(window.innerWidth, window.innerHeight) < 600,
+
     upgradeData: [
-        { key: 'bounces', name: 'Рикошеты', icon: '↗', desc: '+1 рикошет', maxLvl: 8, cost: (l) => 50 + l * 40 },
-        { key: 'damage', name: 'Урон+Волна', icon: '💥', desc: '+урон +волна', maxLvl: 10, cost: (l) => 60 + l * 50 },
-        { key: 'speed', name: 'Скорость', icon: '⚡', desc: '+скорость пули', maxLvl: 6, cost: (l) => 40 + l * 35 },
-        { key: 'shots', name: 'Выстрелы', icon: '🔫', desc: '+1 выстрел', maxLvl: 7, cost: (l) => 80 + l * 60 },
-        { key: 'multishot', name: 'Мультишот', icon: '🔱', desc: '+1 пуля', maxLvl: 4, cost: (l) => 150 + l * 100 },
-        { key: 'piercing', name: 'Пробивание', icon: '🎯', desc: '+1 цель сквозь', maxLvl: 5, cost: (l) => 200 + l * 120 },
-        { key: 'predict', name: 'Прогноз', icon: '🔮', desc: 'улучш. прицел', maxLvl: 3, cost: (l) => 60 + l * 50 },
-        { key: 'crit', name: 'Крит. удар', icon: '⚔', desc: '+8% шанс x3', maxLvl: 5, cost: (l) => 80 + l * 60 },
-        { key: 'magnet', name: 'Магнит', icon: '🧲', desc: 'пуля к цели', maxLvl: 4, cost: (l) => 100 + l * 80 },
+        { key: 'bounces', name: 'Рикошеты', icon: '↗', desc: '+1 рикошет', maxLvl: 8, baseCost: (l) => 50 + l * 40 },
+        { key: 'damage', name: 'Урон+Волна', icon: '💥', desc: '+урон +волна', maxLvl: 10, baseCost: (l) => 60 + l * 50 },
+        { key: 'speed', name: 'Скорость', icon: '⚡', desc: '+скорость пули', maxLvl: 6, baseCost: (l) => 40 + l * 35 },
+        { key: 'shots', name: 'Выстрелы', icon: '🔫', desc: '+1 выстрел', maxLvl: 7, baseCost: (l) => 80 + l * 60, noMobileMult: true },
+        { key: 'multishot', name: 'Мультишот', icon: '🔱', desc: '+1 пуля', maxLvl: 4, baseCost: (l) => 150 + l * 100 },
+        { key: 'piercing', name: 'Пробивание', icon: '🎯', desc: '+1 цель сквозь', maxLvl: 5, baseCost: (l) => 200 + l * 120 },
+        { key: 'predict', name: 'Прогноз', icon: '🔮', desc: 'улучш. прицел', maxLvl: 3, baseCost: (l) => 60 + l * 50 },
+        { key: 'crit', name: 'Крит. удар', icon: '⚔', desc: '+8% шанс x3', maxLvl: 5, baseCost: (l) => 80 + l * 60 },
+        { key: 'magnet', name: 'Магнит', icon: '🧲', desc: 'пуля к цели', maxLvl: 4, baseCost: (l) => 100 + l * 80 },
     ],
+
+    getUpgradeCost(u, lvl) {
+        const base = u.baseCost(lvl);
+        return (this.isMobile && !u.noMobileMult) ? base * 4 : base;
+    },
 
     drawHUD(ctx, W, H) {
         // верхняя панель
@@ -181,7 +189,7 @@ const UI = {
             const bx = W / 2 - bw / 2;
             const lvl = Player.upgrades[u.key];
             const maxed = lvl >= u.maxLvl;
-            const cost = u.cost(lvl);
+            const cost = this.getUpgradeCost(u, lvl);
             const canBuy = !maxed && Game.coins >= cost;
 
             ctx.fillStyle = maxed ? '#1a2a1a' : canBuy ? '#1a1a3a' : '#1a1a22';
