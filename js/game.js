@@ -287,13 +287,14 @@ const Game = {
             });
         }
 
-        // ── DOUBLE KILL bonus ──
+        // ── DOUBLE KILL bonus + extra shot ──
         if (pierceCount >= 2) {
             const dkBonus = target.score * 2;
             totalScore += dkBonus;
+            Player.shotsLeft++;
             this.killTexts.push({
                 x: target.x, y: target.y - floatY,
-                text: `ДВОЙНОЕ! +${dkBonus}`,
+                text: `ДВОЙНОЕ! +${dkBonus} +1🔫`,
                 life: 1.5, maxLife: 1.5,
                 color: '#ff44ff'
             });
@@ -305,6 +306,7 @@ const Game = {
                 color: '#ff44ff',
                 size: 32
             });
+            Sound.bonusShot();
             Particles.explosion(target.x, target.y, '#ff44ff', 1.0);
             Particles.flash('#ff44ff', 0.3);
             Shake.trigger(10);
