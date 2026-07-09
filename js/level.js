@@ -369,6 +369,43 @@ class Target {
             ctx.stroke();
         }
 
+        // powerup — pulsing diamond with rotating sparkles
+        if (this.type === 'powerup') {
+            const bColor = this.bonus ? this.bonus.color : '#fff';
+            // rotating sparkle ring
+            const spA = 0.4 + Math.sin(this.pulse * 4) * 0.3;
+            ctx.strokeStyle = bColor;
+            ctx.globalAlpha = alpha * spA;
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 5; i++) {
+                const sa = this.pulse * 2 + i * TAU / 5;
+                const sr = drawR + 8 + Math.sin(this.pulse * 3 + i) * 3;
+                ctx.beginPath();
+                ctx.arc(this.x + Math.cos(sa) * sr, this.y + Math.sin(sa) * sr, 2.5, 0, TAU);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = alpha;
+            // diamond shape inside
+            ctx.fillStyle = bColor;
+            ctx.globalAlpha = alpha * 0.4;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y - drawR * 0.6);
+            ctx.lineTo(this.x + drawR * 0.4, this.y);
+            ctx.lineTo(this.x, this.y + drawR * 0.6);
+            ctx.lineTo(this.x - drawR * 0.4, this.y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.globalAlpha = alpha;
+            // pulsing outer
+            ctx.strokeStyle = bColor;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, drawR + 12 + Math.sin(this.pulse * 2) * 4, 0, TAU);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         // multiplier — golden star burst pattern
         if (this.type === 'multiplier') {
             const mPulse = 0.5 + Math.sin(this.pulse * 3) * 0.3;
@@ -477,6 +514,10 @@ class Target {
         if (this.type === 'multiplier') {
             ctx.fillStyle = '#ffdd33';
             ctx.fillText('✦', this.x, this.y - this.radius - 3);
+        }
+        if (this.type === 'powerup' && this.bonus) {
+            ctx.fillStyle = this.bonus.color;
+            ctx.fillText(this.bonus.icon, this.x, this.y - this.radius - 3);
         }
 
         ctx.globalAlpha = 1;
@@ -697,6 +738,39 @@ const Level = {
         }
 
         this.validateAndFix(W, H);
+
+        // ── Generate powerup target (level 4+) ──
+        if (num >= 4) {
+            const bonuses = [
+                { id: 'extraShots', name: '+1 СНАРЯД', color: '#44ffaa', icon: '🔫' },
+                { id: 'extraShots2', name: '+2 СНАРЯДА', color: '#44ffaa', icon: '🔫🔫' },
+                { id: 'dmgBoost', name: 'УРОН x2', color: '#ff4466', icon: '💥' },
+                { id: 'maxBounce', name: 'МАКС РИКОШЕТ', color: '#44ccff', icon: '↗' },
+                { id: 'magnetBoost', name: 'МАГНИТ', color: '#bb66ff', icon: '🧲' },
+            ];
+            const bonus = bonuses[randInt(0, bonuses.length - 1)];
+
+            for (let a = 0; a < 80; a++) {
+                const px = rand(pa.x + 50, pa.x + pa.w - 50);
+                const py = rand(pa.y + 40, pa.y + pa.h - 150);
+                let blocked = false;
+                for (const w of this.walls) {
+                    if (px + 20 > w.x && px - 20 < w.x + w.w &&
+                        py + 20 > w.y && py - 20 < w.y + w.h) { blocked = true; break; }
+                }
+                if (blocked) continue;
+                for (const ot of this.targets) {
+                    if (dist(px, py, ot.x, ot.y) < 40) { blocked = true; break; }
+                }
+                if (blocked) continue;
+                if (dist(px, py, this.playerStart.x, this.playerStart.y) < 100) continue;
+
+                const pt = new Target(px, py, 14, 1, bonus.color, 15, 'powerup');
+                pt.bonus = bonus;
+                this.targets.push(pt);
+                break;
+            }
+        }
 
         // ── Generate coin pickups ──
         const coinCount = Math.min(2 + Math.floor(num / 2), 6);

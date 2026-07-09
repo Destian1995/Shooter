@@ -429,6 +429,33 @@ const Game = {
             });
         }
 
+        // ── Powerup: apply random bonus for the rest of the level ──
+        if (target.type === 'powerup' && target.bonus) {
+            const b = target.bonus;
+            if (b.id === 'extraShots') Player.shotsLeft += 1;
+            else if (b.id === 'extraShots2') Player.shotsLeft += 2;
+            else if (b.id === 'dmgBoost') { Player.stats.damage *= 2; }
+            else if (b.id === 'maxBounce') { Player.stats.maxBounces += 5; }
+            else if (b.id === 'magnetBoost') { Player.stats.magnet = Math.max(Player.stats.magnet, 80); }
+
+            this.comboTexts.push({
+                x: this.W / 2, y: this.H * 0.25,
+                text: b.name + '!',
+                life: 2.5, maxLife: 2.5,
+                color: b.color,
+                size: 32
+            });
+            this.killTexts.push({
+                x: target.x, y: target.y - floatY,
+                text: 'БОНУС!',
+                life: 1.8, maxLife: 1.8,
+                color: b.color
+            });
+            Particles.burst(target.x, target.y, 25, b.color, 300, 6, 0.6, 15);
+            Particles.burst(target.x, target.y, 15, '#fff', 200, 4, 0.4, 10);
+            Sound.bonusShot();
+        }
+
         // ── Multiplier: spawn 3 extra bullets in random directions (no shockwave) ──
         if (target.type === 'multiplier') {
             const tier = Player.getBulletColor();
