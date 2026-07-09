@@ -4,23 +4,27 @@ const Sound = {
     ctx: null,
     enabled: true,
     volume: 0.4,
-    initialized: false,
+    unlocked: false,
 
     init() {
-        if (this.initialized) return;
-        try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-            this.initialized = true;
-        } catch (e) {
-            this.enabled = false;
-        }
+        // на мобильных не создаём контекст до тача
     },
 
-    // разблокировка аудио на мобильных (нужен тач/клик)
+    // разблокировка аудио на мобильных — вызывается при каждом тач/клик
     unlock() {
-        if (!this.ctx) this.init();
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
+        if (this.unlocked && this.ctx && this.ctx.state === 'running') return;
+
+        try {
+            if (!this.ctx) {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume().then(() => { this.unlocked = true; });
+            } else {
+                this.unlocked = true;
+            }
+        } catch (e) {
+            this.enabled = false;
         }
     },
 
@@ -32,7 +36,7 @@ const Sound = {
     // ── Базовые генераторы ──
 
     play(fn) {
-        if (!this.enabled || !this.ctx) return;
+        if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
         try { fn(this.ctx, this.ctx.currentTime); } catch(e) {}
     },
 

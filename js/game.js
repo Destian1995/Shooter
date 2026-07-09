@@ -483,6 +483,7 @@ const Game = {
 
     onTouchStart(e) {
         e.preventDefault();
+        Sound.unlock(); // разблокировка аудио на мобильных
         const p = this.getPos(e);
         this.handleInputStart(p.x, p.y);
     },
