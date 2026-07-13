@@ -189,11 +189,43 @@ const UI = {
         this.drawButton(ctx, W / 2 - 90, H * 0.57, 180, 50, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
         this.drawButton(ctx, W / 2 - 90, H * 0.66, 180, 42, 'ОБ АВТОРЕ', '#887744', '#221a0a', 'about');
 
+        // галочка автосохранения
+        const cbX = W / 2 - 90, cbY = H * 0.74, cbW = 180, cbH = 32;
+        const asOn = Game.autosave;
+        ctx.fillStyle = asOn ? '#0a1a0a' : '#0a0a15';
+        ctx.strokeStyle = asOn ? '#44aa66' : '#444';
+        ctx.lineWidth = 1.5;
+        this.roundRect(ctx, cbX, cbY, cbW, cbH, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        // чекбокс
+        const boxX = cbX + 10, boxY = cbY + 7, boxS = 18;
+        ctx.strokeStyle = asOn ? '#44ff88' : '#555';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxX, boxY, boxS, boxS);
+        if (asOn) {
+            ctx.strokeStyle = '#44ff88';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(boxX + 3, boxY + boxS * 0.5);
+            ctx.lineTo(boxX + boxS * 0.4, boxY + boxS - 4);
+            ctx.lineTo(boxX + boxS - 3, boxY + 3);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = asOn ? '#44ff88' : '#778899';
+        ctx.textAlign = 'left';
+        ctx.font = '13px Arial';
+        ctx.fillText('Автосохранение', boxX + boxS + 8, cbY + cbH / 2);
+        ctx.textAlign = 'center';
+        this.buttons.push({ x: cbX, y: cbY, w: cbW, h: cbH, action: 'toggleAutosave' });
+
         // статистика
         ctx.fillStyle = '#556677';
         ctx.font = '13px Arial';
-        ctx.fillText(`Лучший счёт: ${Game.highScore}`, W / 2, H * 0.78);
-        ctx.fillText(`Лучший уровень: ${Game.highLevel}`, W / 2, H * 0.78 + 22);
+        ctx.fillText(`Лучший счёт: ${Game.highScore}`, W / 2, H * 0.82);
+        ctx.fillText(`Лучший уровень: ${Game.highLevel}`, W / 2, H * 0.82 + 22);
 
         // версия
         ctx.fillStyle = '#334';
@@ -319,8 +351,21 @@ const UI = {
             ctx.shadowBlur = 0;
         }
 
-        this.drawButton(ctx, W / 2 - 90, H * 0.66, 180, 48, 'ЗАНОВО', '#cc3333', '#330000', 'restart');
-        this.drawButton(ctx, W / 2 - 90, H * 0.76, 180, 42, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+        // кнопка продолжить с чекпоинта
+        if (Game.autosave && Game.hasCheckpoint()) {
+            try {
+                const cp = JSON.parse(localStorage.getItem('rs_checkpoint'));
+                ctx.fillStyle = '#88aacc';
+                ctx.font = '12px Arial';
+                ctx.fillText(`Сохранение: уровень ${cp.levelNum}`, W / 2, H * 0.62);
+            } catch {}
+            this.drawButton(ctx, W / 2 - 90, H * 0.65, 180, 48, 'ПРОДОЛЖИТЬ', '#44aa66', '#0a2a0a', 'continue');
+            this.drawButton(ctx, W / 2 - 90, H * 0.75, 180, 44, 'ЗАНОВО', '#cc3333', '#330000', 'restart');
+            this.drawButton(ctx, W / 2 - 90, H * 0.84, 180, 38, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+        } else {
+            this.drawButton(ctx, W / 2 - 90, H * 0.66, 180, 48, 'ЗАНОВО', '#cc3333', '#330000', 'restart');
+            this.drawButton(ctx, W / 2 - 90, H * 0.76, 180, 42, 'РЕКОРДЫ', '#4488ff', '#112244', 'leaderboard');
+        }
     },
 
     drawAbout(ctx, W, H) {

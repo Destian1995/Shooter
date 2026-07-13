@@ -12,6 +12,7 @@ const Game = {
     highScore: 0,
     highLevel: 0,
     levelNum: 1,
+    autosave: false,   // автосохранение каждые 3 уровня
     levelScore: 0,
     levelCoins: 0,
     touching: false,
@@ -35,9 +36,10 @@ const Game = {
         // звук
         Sound.init();
 
-        // load records only (progress resets each run)
+        // load records and settings
         this.highScore = parseInt(localStorage.getItem('rs_highScore') || '0');
         this.highLevel = parseInt(localStorage.getItem('rs_highLevel') || '0');
+        this.autosave = localStorage.getItem('rs_autosave') === 'true';
 
         // input
         this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
@@ -77,6 +79,47 @@ const Game = {
         localStorage.setItem('rs_highLevel', this.highLevel);
     },
 
+    toggleAutosave() {
+        this.autosave = !this.autosave;
+        localStorage.setItem('rs_autosave', this.autosave ? 'true' : 'false');
+    },
+
+    // сохранение контрольной точки (каждые 3 уровня)
+    saveCheckpoint() {
+        const data = {
+            score: this.score,
+            coins: this.coins,
+            coinMultiplier: this.coinMultiplier,
+            levelNum: this.levelNum,
+            upgrades: { ...Player.upgrades },
+        };
+        localStorage.setItem('rs_checkpoint', JSON.stringify(data));
+    },
+
+    // загрузка контрольной точки
+    loadCheckpoint() {
+        try {
+            const raw = localStorage.getItem('rs_checkpoint');
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            this.score = data.score;
+            this.coins = data.coins;
+            this.coinMultiplier = data.coinMultiplier;
+            this.levelNum = data.levelNum;
+            Player.upgrades = { ...data.upgrades };
+            Player.applyUpgrades();
+            return true;
+        } catch { return false; }
+    },
+
+    hasCheckpoint() {
+        return !!localStorage.getItem('rs_checkpoint');
+    },
+
+    clearCheckpoint() {
+        localStorage.removeItem('rs_checkpoint');
+    },
+
     startGame() {
         this.score = 0;
         this.coins = 0;
@@ -86,8 +129,19 @@ const Game = {
         this.comboTimer = 0;
         this.comboTexts = [];
         this.killTexts = [];
+        this.clearCheckpoint();
         Player.upgrades = { bounces: 0, damage: 0, speed: 0, shots: 0, piercing: 0, predict: 0, crit: 0, magnet: 0, vampire: 0, lucky: 0, ghost: 0 };
         Player.applyUpgrades();
+        this.startLevel();
+    },
+
+    // продолжить с контрольной точки
+    continueFromCheckpoint() {
+        if (!this.loadCheckpoint()) return;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.comboTexts = [];
+        this.killTexts = [];
         this.startLevel();
     },
 
@@ -209,6 +263,13 @@ const Game = {
         Particles.flash('#ffcc00', 0.5);
 
         this.save();
+
+        // автосохранение каждые 3 уровня
+        if (this.autosave && this.levelNum % 3 === 0) {
+            this.saveCheckpoint();
+            this.showBanner('💾 СОХРАНЕНО', '#44ffaa', 20);
+        }
+
         this.state = 'upgrade';
         UI.buttons = [];
     },
@@ -712,6 +773,8 @@ const Game = {
                 if (btn.action === 'play') this.startGame();
                 else if (btn.action === 'next') { this.levelNum++; this.startLevel(); }
                 else if (btn.action === 'restart') this.startGame();
+                else if (btn.action === 'continue') this.continueFromCheckpoint();
+                else if (btn.action === 'toggleAutosave') { this.toggleAutosave(); UI.buttons = []; }
                 else if (btn.action === 'leaderboard') { this.state = 'leaderboard'; UI.buttons = []; }
                 else if (btn.action === 'about') { this.state = 'about'; UI.buttons = []; }
                 else if (btn.action === 'back') { this.state = 'menu'; UI.buttons = []; }

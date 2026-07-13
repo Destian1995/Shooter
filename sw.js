@@ -1,4 +1,4 @@
-const CACHE_NAME = 'strelok-v8';
+const CACHE_NAME = 'strelok-v9';
 const ASSETS = [
     './',
     './index.html',
