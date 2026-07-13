@@ -4,8 +4,7 @@ const Game = {
     VERSION: '2.0.0',
     canvas: null, ctx: null,
     W: 0, H: 0,
-    state: 'menu', // menu, playing, upgrade, gameover, leaderboard, nameinput
-    inputName: '',
+    state: 'menu', // menu, playing, upgrade, gameover, leaderboard, about
     time: 0,
     score: 0,
     coins: 0,
@@ -48,20 +47,7 @@ const Game = {
         this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
 
-        // клавиатура для ввода имени
-        window.addEventListener('keydown', (e) => {
-            if (this.state !== 'nameinput') return;
-            if (e.key === 'Backspace') {
-                this.inputName = this.inputName.slice(0, -1);
-            } else if (e.key === 'Enter') {
-                const name = this.inputName.trim() || 'Игрок';
-                Leaderboard.addRecord(name, this.score, this.levelNum);
-                this.state = 'gameover';
-                UI.buttons = [];
-            } else if (e.key.length === 1 && this.inputName.length < 12) {
-                this.inputName += e.key.toUpperCase();
-            }
-        });
+        // клавиатура не используется (имя генерируется автоматически)
 
         // start loop
         let last = performance.now();
@@ -240,13 +226,13 @@ const Game = {
 
         this.save();
 
-        // если рекорд — экран ввода имени, иначе — конец игры
+        // автоматическое сохранение рекорда с именем по дате/времени
         if (Leaderboard.isHighScore(this.score)) {
-            this.inputName = '';
-            this.state = 'nameinput';
-        } else {
-            this.state = 'gameover';
+            const now = new Date();
+            const autoName = `Игрок_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}_${now.getDate().toString().padStart(2,'0')}${(now.getMonth()+1).toString().padStart(2,'0')}`;
+            Leaderboard.addRecord(autoName, this.score, this.levelNum);
         }
+        this.state = 'gameover';
         UI.buttons = [];
     },
 
@@ -739,21 +725,6 @@ const Game = {
                         Player.applyUpgrades();
                     }
                 }
-                else if (btn.action === 'key') {
-                    if (btn.key === '←') {
-                        this.inputName = this.inputName.slice(0, -1);
-                    } else if (btn.key === '_') {
-                        if (this.inputName.length < 12) this.inputName += ' ';
-                    } else {
-                        if (this.inputName.length < 12) this.inputName += btn.key;
-                    }
-                }
-                else if (btn.action === 'saveName') {
-                    const name = this.inputName.trim() || 'Игрок';
-                    Leaderboard.addRecord(name, this.score, this.levelNum);
-                    this.state = 'gameover';
-                    UI.buttons = [];
-                }
             }
             return;
         }
@@ -919,11 +890,6 @@ const Game = {
             UI.drawLeaderboard(ctx, W, H);
         } else if (this.state === 'about') {
             UI.drawAbout(ctx, W, H);
-        } else if (this.state === 'nameinput') {
-            this.drawBackground(ctx, W, H);
-            Particles.draw(ctx);
-            Particles.drawFlash(ctx, W, H);
-            UI.drawNameInput(ctx, W, H);
         }
 
         ctx.restore();
