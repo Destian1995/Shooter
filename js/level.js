@@ -79,9 +79,16 @@ class Target {
         }
     }
 
-    // kill by shockwave (instant death)
+    // kill by shockwave (instant death, except boss takes damage)
     killByShockwave() {
         if (!this.alive) return;
+        if (this.type === 'boss') {
+            // boss resists instant kill — takes 2 damage instead
+            this.hp -= 2;
+            this.hitFlash = 0.3;
+            if (this.hp <= 0) { this.alive = false; this.hp = 0; }
+            return;
+        }
         this.alive = false;
         this.hp = 0;
     }
@@ -103,6 +110,17 @@ class Target {
                 this.x = this.originX;
                 this.y = this.originY + Math.sin(this.moveAngle) * this.moveRange;
             }
+        }
+
+        // boss movement: figure-8 pattern, speed increases with phase
+        if (this.type === 'boss') {
+            const hpRatio = this.hp / this.maxHp;
+            this.bossPhase = hpRatio > 0.6 ? 0 : hpRatio > 0.3 ? 1 : 2;
+            const speedMult = 1 + this.bossPhase * 0.6;
+            this.moveAngle += dt * this.moveSpeed * 0.015 * speedMult;
+            const rangeMult = 1 + this.bossPhase * 0.3;
+            this.x = this.originX + Math.cos(this.moveAngle) * this.moveRange * rangeMult;
+            this.y = this.originY + Math.sin(this.moveAngle * 2) * this.moveRange * 0.5 * rangeMult;
         }
 
         // blinking
@@ -438,6 +456,59 @@ class Target {
             ctx.stroke();
         }
 
+        // boss visual — multi-ring aura, phase-based color shifts
+        if (this.type === 'boss') {
+            const phase = this.bossPhase || 0;
+            const phaseColors = ['#44ddff', '#ffaa22', '#ff2244'];
+            const pc = phaseColors[phase];
+
+            // rotating outer rings
+            for (let r = 0; r < 3; r++) {
+                const ringR = drawR + 10 + r * 8 + Math.sin(this.pulse * (2 + r)) * 3;
+                const ringA = 0.3 - r * 0.08;
+                ctx.strokeStyle = pc;
+                ctx.globalAlpha = alpha * ringA;
+                ctx.lineWidth = 2 - r * 0.5;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, ringR, this.pulse * (1 + r * 0.3), this.pulse * (1 + r * 0.3) + Math.PI * 1.5);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = alpha;
+
+            // inner cross pattern (rotates)
+            ctx.strokeStyle = pc;
+            ctx.lineWidth = 2.5;
+            ctx.globalAlpha = alpha * 0.5;
+            for (let i = 0; i < 4; i++) {
+                const ca = this.pulse * 0.8 + i * Math.PI / 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x + Math.cos(ca) * drawR * 0.3, this.y + Math.sin(ca) * drawR * 0.3);
+                ctx.lineTo(this.x + Math.cos(ca) * drawR * 0.8, this.y + Math.sin(ca) * drawR * 0.8);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = alpha;
+
+            // phase indicator dots
+            for (let i = 0; i < 3; i++) {
+                const dotA = -Math.PI / 2 + i * (Math.PI / 4) - Math.PI / 4;
+                const dotR = drawR + 20;
+                ctx.fillStyle = i <= phase ? pc : '#333';
+                ctx.beginPath();
+                ctx.arc(this.x + Math.cos(dotA) * dotR, this.y + Math.sin(dotA) * dotR, 3, 0, TAU);
+                ctx.fill();
+            }
+
+            // pulsing danger aura in enraged/desperate
+            if (phase >= 1) {
+                const da = 0.05 + Math.sin(this.pulse * 4) * 0.03;
+                ctx.strokeStyle = `rgba(255,${phase >= 2 ? 34 : 170},${phase >= 2 ? 68 : 34},${da})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, drawR + 25 + Math.sin(this.pulse * 3) * 5, 0, TAU);
+                ctx.stroke();
+            }
+        }
+
         // moving arrows
         if (this.type === 'moving') {
             ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -519,6 +590,11 @@ class Target {
             ctx.fillStyle = this.bonus.color;
             ctx.fillText(this.bonus.icon, this.x, this.y - this.radius - 3);
         }
+        if (this.type === 'boss') {
+            const phaseColors = ['#44ddff', '#ffaa22', '#ff2244'];
+            ctx.fillStyle = phaseColors[this.bossPhase || 0];
+            ctx.fillText('👑', this.x, this.y - this.radius - 3);
+        }
 
         ctx.globalAlpha = 1;
     }
@@ -542,6 +618,39 @@ const Level = {
     playerStart: { x: 0, y: 0 },
     playArea: null,
     shockwaveQueue: [],
+    modifier: null,    // active level modifier
+    isBossLevel: false,
+    formation: null,   // target formation type
+    world: 0,          // current world theme (0-4)
+
+    // ── Level modifiers ──
+    modifiers: [
+        { id: 'fog',       name: 'ТУМАН',       icon: '🌫', desc: 'видимость ограничена', color: '#8899bb' },
+        { id: 'speed',     name: 'СКОРОСТЬ',    icon: '💨', desc: 'цели двигаются быстрее', color: '#ffaa44' },
+        { id: 'maze',      name: 'ЛАБИРИНТ',    icon: '🧱', desc: 'больше стен', color: '#aa8866' },
+        { id: 'bounty',    name: 'ЩЕДРОСТЬ',    icon: '💰', desc: 'x2 монеты, +1 HP целей', color: '#ffdd44' },
+        { id: 'tiny',      name: 'МЕЛКИЕ',      icon: '🔬', desc: 'маленькие цели', color: '#88ddff' },
+        { id: 'giant',     name: 'ГИГАНТЫ',     icon: '🦣', desc: 'большие, но мало', color: '#ff8866' },
+        { id: 'swarm',     name: 'РОЙ',         icon: '🐝', desc: 'много целей, мало HP', color: '#aaff44' },
+        { id: 'fortress',  name: 'КРЕПОСТЬ',    icon: '🏰', desc: 'все бронированные', color: '#6688cc' },
+    ],
+
+    // ── Target formations ──
+    formations: ['random', 'circle', 'vshape', 'grid', 'diagonal', 'cross'],
+
+    pickModifier(num) {
+        if (num < 3) return null;
+        if (num % 5 === 0) return null; // boss levels have no modifier
+        if (Math.random() < 0.35) return null; // 35% chance no modifier
+        return this.modifiers[randInt(0, this.modifiers.length - 1)];
+    },
+
+    pickFormation(num) {
+        if (num < 2) return 'random';
+        if (num % 5 === 0) return 'circle'; // boss levels always circle
+        if (Math.random() < 0.4) return 'random';
+        return this.formations[randInt(0, this.formations.length - 1)];
+    },
 
     generate(num, W, H) {
         this.levelNum = num;
@@ -551,6 +660,16 @@ const Level = {
         this.targets = [];
         this.coins = [];
         this.shockwaveQueue = [];
+
+        // determine world theme (changes every 5 levels)
+        this.world = Math.floor((num - 1) / 5);
+
+        // boss level every 5 levels
+        this.isBossLevel = num >= 5 && num % 5 === 0;
+
+        // pick modifier and formation
+        this.modifier = this.pickModifier(num);
+        this.formation = this.pickFormation(num);
 
         const margin = 60;
         this.playArea = { x: margin, y: margin + 80, w: W - margin * 2, h: H - margin * 2 - 80 };
@@ -567,7 +686,9 @@ const Level = {
         this.playerStart = { x: W / 2, y: H - margin - 30 };
 
         // ── Inner walls ──
-        const wallCount = Math.min(1 + Math.floor(num / 2), 10);
+        let wallCount = Math.min(1 + Math.floor(num / 2), 10);
+        if (this.modifier && this.modifier.id === 'maze') wallCount = Math.min(wallCount + 4, 14);
+        if (this.isBossLevel) wallCount = Math.max(1, Math.floor(wallCount * 0.5)); // fewer walls for boss
         const hueBase = (num * 47) % 360;
 
         for (let i = 0; i < wallCount; i++) {
@@ -605,10 +726,21 @@ const Level = {
         this.walls = [...this.borderWalls, ...this.innerWalls];
 
         // ── Targets ──
-        // больше целей на больших уровнях (мир растёт)
-        const targetCount = Math.min(2 + Math.floor(num * 0.8), 12);
-        const movingChance = num <= 2 ? 0 : num <= 4 ? 0.3 : num <= 7 ? 0.5 : 0.7;
-        // blinking targets: appear from level 6+
+        // modifier adjustments
+        const mod = this.modifier;
+        let targetCount;
+        if (this.isBossLevel) {
+            targetCount = Math.min(2 + Math.floor(num * 0.3), 6); // fewer targets + boss
+        } else if (mod && mod.id === 'swarm') {
+            targetCount = Math.min(4 + Math.floor(num * 1.2), 16);
+        } else if (mod && mod.id === 'giant') {
+            targetCount = Math.max(2, Math.min(1 + Math.floor(num * 0.5), 6));
+        } else {
+            targetCount = Math.min(2 + Math.floor(num * 0.8), 12);
+        }
+
+        let movingChance = num <= 2 ? 0 : num <= 4 ? 0.3 : num <= 7 ? 0.5 : 0.7;
+        if (mod && mod.id === 'speed') movingChance = Math.min(movingChance + 0.4, 0.9);
         const blinkChance = num <= 5 ? 0 : num <= 8 ? 0.2 : 0.35;
 
         const targetColors = [
@@ -618,12 +750,24 @@ const Level = {
             '#ff4466', '#44ff88', '#ffaa22', '#ff44ff'
         ];
 
+        // ── Generate formation positions ──
+        const formationPositions = this.generateFormation(this.formation, targetCount, pa);
+
         for (let i = 0; i < targetCount; i++) {
             let placed = false;
             for (let a = 0; a < 150; a++) {
-                const tx = rand(pa.x + 40, pa.x + pa.w - 40);
-                const ty = rand(pa.y + 30, pa.y + pa.h - 140);
-                const tr = rand(15, 20);
+                let tx, ty;
+                // use formation position on first attempts, then fall back to random
+                if (a < 3 && formationPositions && i < formationPositions.length) {
+                    tx = formationPositions[i].x + rand(-10, 10);
+                    ty = formationPositions[i].y + rand(-10, 10);
+                } else {
+                    tx = rand(pa.x + 40, pa.x + pa.w - 40);
+                    ty = rand(pa.y + 30, pa.y + pa.h - 140);
+                }
+                let tr = rand(15, 20);
+                if (mod && mod.id === 'tiny') tr = rand(9, 13);
+                if (mod && mod.id === 'giant') tr = rand(22, 30);
 
                 let blocked = false;
                 const buf = 15;
@@ -653,58 +797,80 @@ const Level = {
                 let hp = 1;
                 let baseScore = 10;
 
-                const roll = Math.random();
-                const isMoving = roll < movingChance;
-                const isBlinking = !isMoving && roll < movingChance + blinkChance;
-                const isExplosive = !isMoving && !isBlinking && num >= 3 && Math.random() < 0.12;
-                // new types: healer lvl5+, shield lvl7+, teleporter lvl4+, splitter lvl6+
-                const isHealer = !isMoving && !isBlinking && !isExplosive && num >= 5 && Math.random() < 0.12;
-                const isTeleporter = !isMoving && !isBlinking && !isExplosive && !isHealer && num >= 4 && Math.random() < 0.15;
-                const isShield = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && num >= 7 && Math.random() < 0.12;
-                const isSplitter = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && num >= 6 && Math.random() < 0.15;
-                const isMultiplier = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && !isSplitter && num >= 3 && Math.random() < 0.12;
-
-                if (isExplosive) {
-                    type = 'explosive';
-                    baseScore = 15;
-                } else if (isHealer) {
-                    type = 'healer';
-                    hp = 2;
-                    baseScore = 25;
-                } else if (isShield) {
-                    type = 'shield';
-                    hp = 2;
-                    baseScore = 30;
-                } else if (isTeleporter) {
-                    type = 'teleporter';
-                    hp = 2;
-                    baseScore = 20;
-                } else if (isSplitter) {
-                    type = 'splitter';
-                    hp = 1;
-                    baseScore = 15;
-                } else if (isMultiplier) {
-                    type = 'multiplier';
-                    hp = 1;
-                    baseScore = 20;
-                } else if (num >= 4 && !isMoving && !isBlinking && Math.random() < 0.25) {
+                if (mod && mod.id === 'fortress') {
                     type = 'armored';
                     hp = 2 + Math.floor(num / 5);
                     baseScore = 20;
+                } else {
+                    const roll = Math.random();
+                    const isMoving = roll < movingChance;
+                    const isBlinking = !isMoving && roll < movingChance + blinkChance;
+                    const isExplosive = !isMoving && !isBlinking && num >= 3 && Math.random() < 0.12;
+                    const isHealer = !isMoving && !isBlinking && !isExplosive && num >= 5 && Math.random() < 0.12;
+                    const isTeleporter = !isMoving && !isBlinking && !isExplosive && !isHealer && num >= 4 && Math.random() < 0.15;
+                    const isShield = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && num >= 7 && Math.random() < 0.12;
+                    const isSplitter = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && num >= 6 && Math.random() < 0.15;
+                    const isMultiplier = !isMoving && !isBlinking && !isExplosive && !isHealer && !isTeleporter && !isShield && !isSplitter && num >= 3 && Math.random() < 0.12;
+
+                    if (isExplosive) {
+                        type = 'explosive';
+                        baseScore = 15;
+                    } else if (isHealer) {
+                        type = 'healer';
+                        hp = 2;
+                        baseScore = 25;
+                    } else if (isShield) {
+                        type = 'shield';
+                        hp = 2;
+                        baseScore = 30;
+                    } else if (isTeleporter) {
+                        type = 'teleporter';
+                        hp = 2;
+                        baseScore = 20;
+                    } else if (isSplitter) {
+                        type = 'splitter';
+                        hp = 1;
+                        baseScore = 15;
+                    } else if (isMultiplier) {
+                        type = 'multiplier';
+                        hp = 1;
+                        baseScore = 20;
+                    } else if (num >= 4 && !isMoving && !isBlinking && Math.random() < 0.25) {
+                        type = 'armored';
+                        hp = 2 + Math.floor(num / 5);
+                        baseScore = 20;
+                    }
+                    if (isMoving) {
+                        type = 'moving';
+                        baseScore = baseScore * 2;
+                    }
+                    if (isBlinking) {
+                        type = 'blinking';
+                        baseScore = baseScore * 2;
+                    }
                 }
-                if (isMoving) {
+
+                // modifier HP/score adjustments
+                if (mod && mod.id === 'bounty') hp = Math.max(hp, 2);
+                if (mod && mod.id === 'swarm') { hp = 1; baseScore = Math.floor(baseScore * 0.7); }
+                if (mod && mod.id === 'giant') { hp += 1; baseScore = Math.floor(baseScore * 1.5); }
+
+                // speed modifier: force moving on more targets
+                if (mod && mod.id === 'speed' && type === 'normal') {
                     type = 'moving';
-                    baseScore = baseScore * 2;
-                }
-                if (isBlinking) {
-                    type = 'blinking';
-                    baseScore = baseScore * 2;
+                    baseScore *= 2;
                 }
 
                 const score = baseScore + Math.floor(num / 3) * 5;
 
-                this.targets.push(new Target(tx, ty, tr, hp,
-                    targetColors[i % targetColors.length], score, type));
+                const t = new Target(tx, ty, tr, hp,
+                    targetColors[i % targetColors.length], score, type);
+                // speed modifier: faster movement
+                if (mod && mod.id === 'speed' && t.type === 'moving') {
+                    t.moveSpeed *= 1.8;
+                    t.moveRange *= 1.3;
+                }
+                this.targets.push(t);
                 placed = true;
                 break;
             }
@@ -713,7 +879,7 @@ const Level = {
                 for (let a = 0; a < 80; a++) {
                     const tx = rand(pa.x + 40, pa.x + pa.w - 40);
                     const ty = rand(pa.y + 30, pa.y + pa.h - 140);
-                    const tr = 16;
+                    const tr = (mod && mod.id === 'tiny') ? 11 : (mod && mod.id === 'giant') ? 26 : 16;
                     let blocked = false;
                     for (const w of this.walls) {
                         if (tx + tr + 5 > w.x && tx - tr - 5 < w.x + w.w &&
@@ -739,41 +905,62 @@ const Level = {
 
         this.validateAndFix(W, H);
 
-        // ── Generate powerup target (level 4+) ──
+        // ── Generate boss target ──
+        if (this.isBossLevel) {
+            this.generateBoss(num, pa, hueBase, W, H);
+        }
+
+        // ── Generate powerup targets ──
+        // boss levels: 3 powerups (гарантированно +выстрелы, +урон, +ещё),  обычные: 1
         if (num >= 4) {
-            const bonuses = [
+            const allBonuses = [
                 { id: 'extraShots', name: '+1 СНАРЯД', color: '#44ffaa', icon: '🔫' },
                 { id: 'extraShots2', name: '+2 СНАРЯДА', color: '#44ffaa', icon: '🔫🔫' },
                 { id: 'dmgBoost', name: 'УРОН x2', color: '#ff4466', icon: '💥' },
                 { id: 'maxBounce', name: 'МАКС РИКОШЕТ', color: '#44ccff', icon: '↗' },
                 { id: 'magnetBoost', name: 'МАГНИТ', color: '#bb66ff', icon: '🧲' },
             ];
-            const bonus = bonuses[randInt(0, bonuses.length - 1)];
 
-            for (let a = 0; a < 80; a++) {
-                const px = rand(pa.x + 50, pa.x + pa.w - 50);
-                const py = rand(pa.y + 40, pa.y + pa.h - 150);
-                let blocked = false;
-                for (const w of this.walls) {
-                    if (px + 20 > w.x && px - 20 < w.x + w.w &&
-                        py + 20 > w.y && py - 20 < w.y + w.h) { blocked = true; break; }
-                }
-                if (blocked) continue;
-                for (const ot of this.targets) {
-                    if (dist(px, py, ot.x, ot.y) < 40) { blocked = true; break; }
-                }
-                if (blocked) continue;
-                if (dist(px, py, this.playerStart.x, this.playerStart.y) < 100) continue;
+            let powerupList;
+            if (this.isBossLevel) {
+                // босс: гарантированно +2 снаряда, урон x2 и ещё один случайный
+                powerupList = [
+                    allBonuses[1], // +2 СНАРЯДА
+                    allBonuses[2], // УРОН x2
+                    allBonuses[randInt(0, allBonuses.length - 1)],
+                ];
+            } else {
+                powerupList = [allBonuses[randInt(0, allBonuses.length - 1)]];
+            }
 
-                const pt = new Target(px, py, 14, 1, bonus.color, 15, 'powerup');
-                pt.bonus = bonus;
-                this.targets.push(pt);
-                break;
+            for (const bonus of powerupList) {
+                for (let a = 0; a < 80; a++) {
+                    const px = rand(pa.x + 50, pa.x + pa.w - 50);
+                    const py = rand(pa.y + 40, pa.y + pa.h - 150);
+                    let blocked = false;
+                    for (const w of this.walls) {
+                        if (px + 20 > w.x && px - 20 < w.x + w.w &&
+                            py + 20 > w.y && py - 20 < w.y + w.h) { blocked = true; break; }
+                    }
+                    if (blocked) continue;
+                    for (const ot of this.targets) {
+                        if (dist(px, py, ot.x, ot.y) < 40) { blocked = true; break; }
+                    }
+                    if (blocked) continue;
+                    if (dist(px, py, this.playerStart.x, this.playerStart.y) < 100) continue;
+
+                    const pt = new Target(px, py, 14, 1, bonus.color, 15, 'powerup');
+                    pt.bonus = bonus;
+                    this.targets.push(pt);
+                    break;
+                }
             }
         }
 
         // ── Generate coin pickups ──
-        const coinCount = Math.min(2 + Math.floor(num / 2), 6);
+        // boss levels: больше монет
+        let coinCount = Math.min(2 + Math.floor(num / 2), 6);
+        if (this.isBossLevel) coinCount = Math.min(coinCount + 4, 10);
         for (let i = 0; i < coinCount; i++) {
             for (let a = 0; a < 50; a++) {
                 const cx = rand(pa.x + 30, pa.x + pa.w - 30);
@@ -785,9 +972,12 @@ const Level = {
                 }
                 if (blocked) continue;
                 if (dist(cx, cy, this.playerStart.x, this.playerStart.y) < 60) continue;
+                const coinValue = this.isBossLevel
+                    ? 10 + num * 3 + randInt(5, 15)
+                    : 5 + num * 2 + randInt(0, 5);
                 this.coins.push({
                     x: cx, y: cy, radius: 8,
-                    value: 5 + num * 2 + randInt(0, 5),
+                    value: coinValue,
                     pulse: rand(0, TAU),
                     bobSpeed: rand(2, 4),
                     baseY: cy,
@@ -816,6 +1006,133 @@ const Level = {
             }
         }
         return radius;
+    },
+
+    // ── Formation position generators ──
+    generateFormation(type, count, pa) {
+        const cx = pa.x + pa.w / 2;
+        const cy = pa.y + pa.h * 0.35;
+        const positions = [];
+
+        if (type === 'circle') {
+            const radius = Math.min(pa.w, pa.h) * 0.25;
+            for (let i = 0; i < count; i++) {
+                const a = (i / count) * TAU - Math.PI / 2;
+                positions.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
+            }
+        } else if (type === 'vshape') {
+            const spread = pa.w * 0.35;
+            const depth = pa.h * 0.3;
+            for (let i = 0; i < count; i++) {
+                const t = i / Math.max(count - 1, 1);
+                const side = i % 2 === 0 ? -1 : 1;
+                const row = Math.floor(i / 2);
+                const rowT = row / Math.max(Math.floor(count / 2), 1);
+                positions.push({
+                    x: cx + side * rowT * spread,
+                    y: pa.y + 40 + rowT * depth
+                });
+            }
+        } else if (type === 'grid') {
+            const cols = Math.ceil(Math.sqrt(count));
+            const rows = Math.ceil(count / cols);
+            const gw = pa.w * 0.6;
+            const gh = pa.h * 0.4;
+            for (let i = 0; i < count; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({
+                    x: cx - gw / 2 + (col + 0.5) * (gw / cols),
+                    y: pa.y + 50 + (row + 0.5) * (gh / rows)
+                });
+            }
+        } else if (type === 'diagonal') {
+            const startX = pa.x + pa.w * 0.15;
+            const startY = pa.y + 40;
+            const endX = pa.x + pa.w * 0.85;
+            const endY = pa.y + pa.h * 0.55;
+            for (let i = 0; i < count; i++) {
+                const t = i / Math.max(count - 1, 1);
+                positions.push({
+                    x: lerp(startX, endX, t),
+                    y: lerp(startY, endY, t)
+                });
+            }
+        } else if (type === 'cross') {
+            const armLen = Math.min(pa.w, pa.h) * 0.25;
+            // center
+            positions.push({ x: cx, y: cy });
+            // distribute remaining on 4 arms
+            for (let i = 1; i < count; i++) {
+                const arm = (i - 1) % 4;
+                const step = Math.floor((i - 1) / 4) + 1;
+                const d = step * (armLen / 3);
+                const angles = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+                positions.push({
+                    x: cx + Math.cos(angles[arm]) * d,
+                    y: cy + Math.sin(angles[arm]) * d
+                });
+            }
+        } else {
+            return null; // random placement
+        }
+        return positions;
+    },
+
+    // ── Boss target generator ──
+    generateBoss(num, pa, hueBase, W, H) {
+        const cx = pa.x + pa.w / 2;
+        const cy = pa.y + pa.h * 0.3;
+        const bossRadius = 28 + Math.floor(num / 5) * 2;
+        // boss HP: 5 → 7 → 9 → 11... (scaled by world, not raw level)
+        const bossHP = 5 + Math.floor(num / 5) * 2;
+        const bossScore = 50 + num * 10;
+        const bossColor = hsl((hueBase + 180) % 360, 100, 55);
+
+        const boss = new Target(cx, cy, bossRadius, bossHP, bossColor, bossScore, 'boss');
+        boss.maxHp = bossHP;
+        boss.bossPhase = 0; // 0=normal, 1=enraged, 2=desperate
+        boss.moveSpeed = 30 + num * 2;
+        boss.moveRange = 40 + num * 3;
+        boss.moveAngle = 0;
+        boss.movePattern = 0;
+        // boss moves in figure-8
+        boss.originX = cx;
+        boss.originY = cy;
+        this.targets.push(boss);
+    },
+
+    // ── Fog of war drawing ──
+    drawFog(ctx, W, H) {
+        if (!this.modifier || this.modifier.id !== 'fog') return;
+        // dark overlay with holes around player and active bullets
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(0,0,10,0.85)';
+        ctx.fillRect(0, 0, W, H);
+
+        // cut out visibility circles
+        ctx.globalCompositeOperation = 'destination-out';
+        // player visibility
+        const pr = 140;
+        const pg = ctx.createRadialGradient(Player.x, Player.y, 0, Player.x, Player.y, pr);
+        pg.addColorStop(0, 'rgba(0,0,0,1)');
+        pg.addColorStop(0.7, 'rgba(0,0,0,0.8)');
+        pg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = pg;
+        ctx.fillRect(Player.x - pr, Player.y - pr, pr * 2, pr * 2);
+
+        // bullet visibility
+        for (const b of Player.bullets) {
+            const br = 100;
+            const bg = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, br);
+            bg.addColorStop(0, 'rgba(0,0,0,1)');
+            bg.addColorStop(0.6, 'rgba(0,0,0,0.6)');
+            bg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = bg;
+            ctx.fillRect(b.x - br, b.y - br, br * 2, br * 2);
+        }
+        ctx.restore();
     },
 
     isReachable(px, py, tx, ty, hitRadius, maxBounces, W, H) {

@@ -229,6 +229,23 @@ const Sound = {
         });
     },
 
+    bossIntro() {
+        this.play((ctx, t) => {
+            // ominous low rumble + rising tone
+            this.noise(t, 0.6, 0.3);
+            this.osc('sine', 60, t, 0.5, 0.3);
+            this.osc('sawtooth', 80, t + 0.1, 0.4, 0.25);
+            const o = ctx.createOscillator();
+            const g = this.makeGain(0.25, t, 0.6);
+            o.type = 'sine';
+            o.frequency.setValueAtTime(80, t);
+            o.frequency.exponentialRampToValueAtTime(400, t + 0.5);
+            o.connect(g);
+            o.start(t);
+            o.stop(t + 0.6);
+        });
+    },
+
     click() {
         this.play((ctx, t) => {
             this.osc('sine', 800, t, 0.04, 0.1);

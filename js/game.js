@@ -1,7 +1,7 @@
 // ── Main game controller ──
 
 const Game = {
-    VERSION: '1.5.0',
+    VERSION: '2.0.0',
     canvas: null, ctx: null,
     W: 0, H: 0,
     state: 'menu', // menu, playing, upgrade, gameover, leaderboard, nameinput
@@ -125,6 +125,10 @@ const Game = {
 
         Level.generate(this.levelNum, vW, vH);
         Player.init(Level.playerStart.x, Level.playerStart.y);
+        // boss levels: +3 bonus shots to handle the boss
+        if (Level.isBossLevel) {
+            Player.shotsLeft += 3;
+        }
         Particles.clear();
         this.state = 'playing';
         this.targetGridHue = (this.levelNum * 47) % 360;
@@ -137,7 +141,39 @@ const Game = {
 
         // level-up banner
         if (this.levelNum > 1) {
-            this.showBanner(`УРОВЕНЬ ${this.levelNum}`, '#00ddff', 28);
+            // world change banner
+            const prevWorld = Math.floor((this.levelNum - 2) / 5);
+            const curWorld = Level.world;
+            if (curWorld !== prevWorld) {
+                const theme = this.getWorldTheme();
+                this.showBanner(`МИР: ${theme.name}`, theme.nameColor, 32);
+            }
+
+            // boss level banner
+            if (Level.isBossLevel) {
+                Sound.bossIntro();
+                Shake.trigger(12);
+                this.showBanner('БОСС!', '#ff2244', 36);
+                this.showBanner(`УРОВЕНЬ ${this.levelNum}`, '#ff8844', 24);
+            } else {
+                this.showBanner(`УРОВЕНЬ ${this.levelNum}`, '#00ddff', 28);
+            }
+
+            // modifier banner
+            if (Level.modifier) {
+                const m = Level.modifier;
+                this.showBanner(`${m.icon} ${m.name}: ${m.desc}`, m.color, 18);
+            }
+
+            // formation banner (for non-random)
+            const formNames = {
+                circle: 'КРУГ', vshape: 'КЛИН', grid: 'СТРОЙ',
+                diagonal: 'ДИАГОНАЛЬ', cross: 'КРЕСТ'
+            };
+            if (Level.formation && formNames[Level.formation]) {
+                this.showBanner(`Формация: ${formNames[Level.formation]}`, '#88aacc', 14);
+            }
+
             const targetCount = Level.targets.length;
             const types = Level.targets.map(t => t.type).filter(t => t !== 'normal');
             if (types.length > 0) {
@@ -146,7 +182,7 @@ const Game = {
                     moving: 'движущиеся', blinking: 'мигающие', armored: 'бронированные',
                     explosive: 'взрывные', healer: 'лекари', shield: 'щитовики',
                     teleporter: 'телепортеры', splitter: 'делящиеся',
-                    multiplier: 'множители', powerup: 'бонус',
+                    multiplier: 'множители', powerup: 'бонус', boss: 'БОСС',
                 };
                 const names = unique.slice(0, 3).map(t => typeNames[t] || t).join(', ');
                 this.showBanner(`${targetCount} целей: ${names}`, '#aabbcc', 16);
@@ -163,7 +199,10 @@ const Game = {
         const shotBonus = Player.shotsLeft * 10;
         this.levelScore += shotBonus;
 
-        this.levelCoins = Math.floor((10 + this.levelNum * 8 + Player.shotsLeft * 5) * this.coinMultiplier);
+        let coinBonus = 1;
+        if (Level.modifier && Level.modifier.id === 'bounty') coinBonus = 2;
+        if (Level.isBossLevel) coinBonus *= 1.5;
+        this.levelCoins = Math.floor((10 + this.levelNum * 8 + Player.shotsLeft * 5) * this.coinMultiplier * coinBonus);
 
         this.score += this.levelScore;
         this.coins += this.levelCoins;
@@ -242,6 +281,15 @@ const Game = {
             this.killTexts.push({
                 x: target.x + 20, y: target.y - 30,
                 text: '+1🔫', life: 1.0, maxLife: 1.0, color: '#ff4466'
+            });
+        }
+
+        // boss level: non-boss kills have 50% chance to give +1 shot
+        if (Level.isBossLevel && target.type !== 'boss' && Math.random() < 0.5) {
+            Player.shotsLeft++;
+            this.killTexts.push({
+                x: target.x - 15, y: target.y - 15,
+                text: '+1🔫', life: 0.8, maxLife: 0.8, color: '#44ffaa'
             });
         }
 
@@ -515,6 +563,39 @@ const Game = {
             Particles.burst(target.x, target.y, 25, b.color, 300, 6, 0.6, 15);
             Particles.burst(target.x, target.y, 15, '#fff', 200, 4, 0.4, 10);
             Sound.bonusShot();
+        }
+
+        // ── Boss kill: massive celebration ──
+        if (target.type === 'boss') {
+            Sound.explosion();
+            Sound.levelComplete();
+            // massive multi-explosion
+            for (let i = 0; i < 8; i++) {
+                setTimeout(() => {
+                    Particles.explosion(
+                        target.x + rand(-40, 40), target.y + rand(-40, 40),
+                        hsl(rand(0, 360), 100, 60), 2.0);
+                }, i * 100);
+            }
+            Particles.flash('#ffdd00', 0.8);
+            Particles.triggerSlowmo(1.0);
+            Shake.trigger(25);
+            Player.shotsLeft += 3;
+
+            this.comboTexts.push({
+                x: this.W / 2, y: this.H * 0.2,
+                text: 'БОСС ПОВЕРЖЕН!!!',
+                life: 3.0, maxLife: 3.0,
+                color: '#ffdd00',
+                size: 42
+            });
+            this.killTexts.push({
+                x: target.x, y: target.y - floatY,
+                text: '+3 ВЫСТРЕЛА!',
+                life: 2.0, maxLife: 2.0,
+                color: '#ffdd00'
+            });
+            floatY += 22;
         }
 
         // ── Multiplier: spawn 3 extra bullets in random directions (no shockwave) ──
@@ -806,6 +887,7 @@ const Game = {
             Level.drawTargets(ctx);
             Player.draw(ctx);
             Particles.draw(ctx);
+            Level.drawFog(ctx, vW, vH);
             Particles.drawFlash(ctx, vW, vH);
             this.drawFloatingTexts(ctx);
             this.drawAimHint(ctx, vW, vH);
@@ -954,44 +1036,112 @@ const Game = {
         ctx.shadowBlur = 0;
     },
 
-    drawBackground(ctx, W, H) {
-        // фон плавно меняется с уровнем
-        // уровень влияет на: насыщенность, яркость, скорость сетки, кол-во эффектов
-        const lvl = this.levelNum;
-        const intensity = Math.min(lvl / 15, 1); // 0..1 от спокойного к интенсивному
-        const bgSat = 10 + intensity * 25;
-        const bgLight = 5 + intensity * 5;
+    // World themes: 0=Космос, 1=Неон, 2=Огонь, 3=Лёд, 4+=Хаос
+    worldThemes: [
+        { name: 'КОСМОС',  nameColor: '#4488ff', bgHueShift: 0,   sat: 1.0, gridStyle: 'lines',   particleColor: null },
+        { name: 'НЕОН',    nameColor: '#ff44ff', bgHueShift: 180, sat: 1.4, gridStyle: 'dots',     particleColor: '#ff44ff' },
+        { name: 'ОГОНЬ',   nameColor: '#ff6622', bgHueShift: 15,  sat: 1.2, gridStyle: 'lines',    particleColor: '#ff4400' },
+        { name: 'ЛЁД',     nameColor: '#44ddff', bgHueShift: 200, sat: 0.7, gridStyle: 'hex',      particleColor: '#88ddff' },
+        { name: 'ХАОС',    nameColor: '#ffdd00', bgHueShift: 0,   sat: 1.6, gridStyle: 'glitch',   particleColor: '#ff00ff' },
+    ],
 
-        // двойной градиент — центр + углы разного цвета
+    getWorldTheme() {
+        const w = Level.world || 0;
+        return this.worldThemes[Math.min(w, this.worldThemes.length - 1)];
+    },
+
+    drawBackground(ctx, W, H) {
+        const lvl = this.levelNum;
+        const intensity = Math.min(lvl / 15, 1);
+        const theme = this.getWorldTheme();
+        const worldIdx = Level.world || 0;
+
+        const bgSat = (10 + intensity * 25) * theme.sat;
+        const bgLight = 5 + intensity * 5;
+        const themeHue = (this.gridHue + theme.bgHueShift) % 360;
+
+        // двойной градиент
         const bgGrad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.7);
-        bgGrad.addColorStop(0, hsl(this.gridHue, bgSat, bgLight));
-        bgGrad.addColorStop(0.6, hsl((this.gridHue + 30) % 360, bgSat * 0.7, bgLight * 0.6));
-        bgGrad.addColorStop(1, hsl((this.gridHue + 60) % 360, 10, 2));
+        bgGrad.addColorStop(0, hsl(themeHue, bgSat, bgLight));
+        bgGrad.addColorStop(0.6, hsl((themeHue + 30) % 360, bgSat * 0.7, bgLight * 0.6));
+        bgGrad.addColorStop(1, hsl((themeHue + 60) % 360, 10, 2));
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
 
-        // анимированная сетка — ускоряется с уровнем
+        // анимированная сетка — стиль зависит от мира
         const gridSpeed = 5 + intensity * 15;
         const gridAlpha = 0.15 + intensity * 0.2;
-        ctx.strokeStyle = hsl(this.gridHue, 30 + intensity * 20, 12 + intensity * 8, gridAlpha);
-        ctx.lineWidth = 0.5;
-        const gridSize = 40 - intensity * 10; // мельче с уровнем
+        const gridSize = 40 - intensity * 10;
         const offsetX = (this.time * gridSpeed) % gridSize;
         const offsetY = (this.time * gridSpeed * 0.4) % gridSize;
-        for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, H);
-            ctx.stroke();
-        }
-        for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(W, y);
-            ctx.stroke();
+
+        if (theme.gridStyle === 'dots') {
+            // неон: точечная сетка
+            ctx.fillStyle = hsl(themeHue, 60, 40, gridAlpha);
+            for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
+                for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1.5, 0, TAU);
+                    ctx.fill();
+                }
+            }
+        } else if (theme.gridStyle === 'hex') {
+            // лёд: гексагональная сетка
+            ctx.strokeStyle = hsl(themeHue, 30, 20, gridAlpha * 0.7);
+            ctx.lineWidth = 0.5;
+            const hs = gridSize * 1.2;
+            for (let row = -1; row < H / (hs * 0.866) + 1; row++) {
+                for (let col = -1; col < W / hs + 1; col++) {
+                    const hx = col * hs + (row % 2) * hs * 0.5 + offsetX;
+                    const hy = row * hs * 0.866 + offsetY;
+                    ctx.beginPath();
+                    for (let s = 0; s < 6; s++) {
+                        const a = s * TAU / 6;
+                        const px = hx + Math.cos(a) * gridSize * 0.5;
+                        const py = hy + Math.sin(a) * gridSize * 0.5;
+                        s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+            }
+        } else if (theme.gridStyle === 'glitch') {
+            // хаос: дрожащая искажённая сетка
+            ctx.strokeStyle = hsl((themeHue + this.time * 60) % 360, 50, 20, gridAlpha);
+            ctx.lineWidth = 0.5;
+            for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
+                const glitch = Math.sin(x * 0.1 + this.time * 10) * 5;
+                ctx.beginPath();
+                ctx.moveTo(x + glitch, 0);
+                ctx.lineTo(x - glitch, H);
+                ctx.stroke();
+            }
+            for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
+                const glitch = Math.cos(y * 0.1 + this.time * 8) * 5;
+                ctx.beginPath();
+                ctx.moveTo(0, y + glitch);
+                ctx.lineTo(W, y - glitch);
+                ctx.stroke();
+            }
+        } else {
+            // космос/огонь: обычные линии
+            ctx.strokeStyle = hsl(themeHue, 30 + intensity * 20, 12 + intensity * 8, gridAlpha);
+            ctx.lineWidth = 0.5;
+            for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+            }
+            for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(W, y);
+                ctx.stroke();
+            }
         }
 
-        // туманные пятна — появляются с 3 уровня, больше с прогрессом
+        // туманные пятна
         if (lvl >= 3) {
             const nebulaCount = Math.min(Math.floor(intensity * 5), 4);
             for (let i = 0; i < nebulaCount; i++) {
@@ -999,14 +1149,14 @@ const Game = {
                 const ny = H * (0.3 + Math.cos(this.time * 0.2 + i * 1.7) * 0.25);
                 const nr = W * (0.15 + intensity * 0.1);
                 const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr);
-                ng.addColorStop(0, hsl((this.gridHue + i * 90) % 360, 40, 15, 0.06 + intensity * 0.04));
+                ng.addColorStop(0, hsl((themeHue + i * 90) % 360, 40 * theme.sat, 15, 0.06 + intensity * 0.04));
                 ng.addColorStop(1, 'rgba(0,0,0,0)');
                 ctx.fillStyle = ng;
                 ctx.fillRect(0, 0, W, H);
             }
         }
 
-        // плавающие звёзды-точки — больше с уровнем
+        // плавающие звёзды-точки
         if (lvl >= 2) {
             const starCount = Math.floor(5 + intensity * 20);
             for (let i = 0; i < starCount; i++) {
@@ -1015,7 +1165,7 @@ const Game = {
                 const sy = ((Math.cos(seed * 1.3) * 0.5 + 0.5 + this.time * 0.01 * (1 + (i % 3))) % 1) * H;
                 const twinkle = Math.sin(this.time * 3 + seed) * 0.5 + 0.5;
                 ctx.globalAlpha = twinkle * (0.1 + intensity * 0.15);
-                ctx.fillStyle = hsl((this.gridHue + i * 20) % 360, 60, 70);
+                ctx.fillStyle = theme.particleColor || hsl((themeHue + i * 20) % 360, 60, 70);
                 ctx.beginPath();
                 ctx.arc(sx, sy, 1 + twinkle, 0, TAU);
                 ctx.fill();
@@ -1023,19 +1173,76 @@ const Game = {
             ctx.globalAlpha = 1;
         }
 
-        // пульсирующие лучи из центра — с 6 уровня
+        // пульсирующие лучи
         if (lvl >= 6) {
             const rayCount = Math.min(3 + Math.floor(intensity * 5), 6);
             ctx.globalAlpha = 0.03 + intensity * 0.03;
             for (let i = 0; i < rayCount; i++) {
                 const ra = this.time * 0.2 + i * TAU / rayCount;
                 const rLen = W * 0.6;
-                ctx.strokeStyle = hsl((this.gridHue + i * 40) % 360, 50, 40);
+                ctx.strokeStyle = hsl((themeHue + i * 40) % 360, 50 * theme.sat, 40);
                 ctx.lineWidth = 2 + intensity * 4;
                 ctx.beginPath();
                 ctx.moveTo(W / 2, H / 2);
                 ctx.lineTo(W / 2 + Math.cos(ra) * rLen, H / 2 + Math.sin(ra) * rLen);
                 ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // мир огня: плавающие угольки
+        if (worldIdx === 2) {
+            for (let i = 0; i < 12; i++) {
+                const seed = i * 3.7;
+                const ex = (Math.sin(seed + this.time * 0.5) * 0.5 + 0.5) * W;
+                const ey = ((1 - ((this.time * 0.03 * (1 + i % 3) + seed * 0.1) % 1))) * H;
+                const flicker = Math.sin(this.time * 8 + seed) * 0.3 + 0.7;
+                ctx.globalAlpha = flicker * 0.15;
+                ctx.fillStyle = Math.random() > 0.5 ? '#ff4400' : '#ffaa22';
+                ctx.beginPath();
+                ctx.arc(ex, ey, 2 + Math.sin(seed) * 1, 0, TAU);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // мир льда: плавающие кристаллы
+        if (worldIdx === 3) {
+            for (let i = 0; i < 8; i++) {
+                const seed = i * 5.3;
+                const cx = (Math.sin(seed + this.time * 0.2) * 0.5 + 0.5) * W;
+                const cy = ((Math.cos(seed * 1.1 + this.time * 0.15) * 0.5 + 0.5)) * H;
+                const size = 4 + Math.sin(seed) * 2;
+                ctx.globalAlpha = 0.08;
+                ctx.strokeStyle = '#88ddff';
+                ctx.lineWidth = 1;
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(this.time * 0.3 + seed);
+                ctx.beginPath();
+                for (let s = 0; s < 6; s++) {
+                    const a = s * TAU / 6;
+                    const px = Math.cos(a) * size;
+                    const py = Math.sin(a) * size;
+                    s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // мир хаоса: случайные полосы глитча
+        if (worldIdx >= 4) {
+            for (let i = 0; i < 3; i++) {
+                if (Math.random() > 0.95) {
+                    const gy = rand(0, H);
+                    const gh = rand(2, 8);
+                    ctx.globalAlpha = 0.08;
+                    ctx.fillStyle = hsl(rand(0, 360), 100, 60);
+                    ctx.fillRect(0, gy, W, gh);
+                }
             }
             ctx.globalAlpha = 1;
         }
@@ -1049,17 +1256,15 @@ const Game = {
             ctx.fillRect(0, 0, W, H);
         }
 
-        // рамочное свечение краёв — интенсивнее с уровнем
+        // рамочное свечение краёв
         if (lvl >= 4) {
             const edgeGlow = 0.03 + intensity * 0.06;
-            const edgeColor = hsl(this.gridHue, 60, 50, edgeGlow);
-            // top
+            const edgeColor = hsl(themeHue, 60, 50, edgeGlow);
             const gt = ctx.createLinearGradient(0, 0, 0, 60);
             gt.addColorStop(0, edgeColor);
             gt.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = gt;
             ctx.fillRect(0, 0, W, 60);
-            // bottom
             const gb = ctx.createLinearGradient(0, H, 0, H - 60);
             gb.addColorStop(0, edgeColor);
             gb.addColorStop(1, 'rgba(0,0,0,0)');

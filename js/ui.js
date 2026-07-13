@@ -75,12 +75,37 @@ const UI = {
         }
         ctx.shadowBlur = 0;
 
-        // цели
+        // цели + босс HP
         const alive = Level.targets.filter(t => t.alive).length;
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#ff6688';
+        ctx.fillStyle = Level.isBossLevel ? '#ff4466' : '#ff6688';
         ctx.font = 'bold 14px Arial';
         ctx.fillText(`Цели: ${alive}`, W / 2, 14);
+
+        // boss HP bar
+        if (Level.isBossLevel) {
+            const boss = Level.targets.find(t => t.type === 'boss' && t.alive);
+            if (boss) {
+                const barW = Math.min(W * 0.5, 200);
+                const barH = 8;
+                const barX = W / 2 - barW / 2;
+                const barY = 52;
+                // background
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+                ctx.fillStyle = '#222';
+                ctx.fillRect(barX, barY, barW, barH);
+                // HP fill with phase colors
+                const hpRatio = boss.hp / boss.maxHp;
+                const phaseColors = ['#44ddff', '#ffaa22', '#ff2244'];
+                ctx.fillStyle = phaseColors[boss.bossPhase || 0];
+                ctx.fillRect(barX, barY, barW * hpRatio, barH);
+                // label
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Arial';
+                ctx.fillText(`БОСС ${boss.hp}/${boss.maxHp}`, W / 2, barY + barH + 10);
+            }
+        }
 
         // характеристики
         ctx.fillStyle = '#88aacc';
@@ -92,6 +117,28 @@ const UI = {
         if (Player.stats.lucky > 0) infoText += ` 🍀`;
         if (Player.stats.ghost > 0) infoText += ` 👻${Player.stats.ghost}`;
         ctx.fillText(infoText, W / 2, 34);
+
+        // modifier indicator
+        if (Level.modifier) {
+            const m = Level.modifier;
+            ctx.textAlign = 'left';
+            ctx.fillStyle = m.color;
+            ctx.font = 'bold 11px Arial';
+            ctx.globalAlpha = 0.7 + Math.sin(Game.time * 3) * 0.3;
+            ctx.fillText(`${m.icon} ${m.name}`, 15, 54);
+            ctx.globalAlpha = 1;
+        }
+
+        // world name
+        if (Level.world > 0) {
+            const theme = Game.getWorldTheme();
+            ctx.textAlign = 'right';
+            ctx.fillStyle = theme.nameColor;
+            ctx.font = '10px Arial';
+            ctx.globalAlpha = 0.5;
+            ctx.fillText(theme.name, W - 50, 48);
+            ctx.globalAlpha = 1;
+        }
 
         // кнопка звука
         const sx = W - 30, sy = 52;
