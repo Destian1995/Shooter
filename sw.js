@@ -1,8 +1,10 @@
-const CACHE_NAME = 'strelok-v9';
+const CACHE_NAME = 'strelok-v10';
 const ASSETS = [
     './',
     './index.html',
     './manifest.json',
+    './icon-192.png',
+    './icon-512.png',
     './js/sound.js',
     './js/utils.js',
     './js/particles.js',
@@ -29,15 +31,22 @@ self.addEventListener('activate', (e) => {
     self.clients.claim();
 });
 
-// network-first: всегда пробуем загрузить свежую версию
+// cache-first: сначала кэш, потом сеть (полный офлайн)
+// при наличии сети — обновляем кэш в фоне
 self.addEventListener('fetch', (e) => {
     e.respondWith(
-        fetch(e.request)
-            .then((res) => {
-                const clone = res.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        caches.match(e.request).then((cached) => {
+            // фоновое обновление кэша (stale-while-revalidate)
+            const fetchPromise = fetch(e.request).then((res) => {
+                if (res && res.status === 200) {
+                    const clone = res.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+                }
                 return res;
-            })
-            .catch(() => caches.match(e.request))
+            }).catch(() => null);
+
+            // если есть в кэше — отдаём сразу, иначе ждём сеть
+            return cached || fetchPromise;
+        })
     );
 });
